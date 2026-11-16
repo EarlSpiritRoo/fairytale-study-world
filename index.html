@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <title>Fablenook — a cozy study world</title>
+  <meta name="description" content="Walk a tiny fairy-tale world and study together with friends.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <!-- Bagel Fat One = bubbly display · Fredoka = rounded labels · Nunito = clean UI text -->
+  <link href="https://fonts.googleapis.com/css2?family=Bagel+Fat+One&family=Fredoka:wght@500;600;700&family=Nunito:wght@600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <canvas id="game" aria-label="Fablenook world"></canvas>
+  <div id="vignette"></div>
+  <div id="fade"></div>
+
+  <!-- ============ HUD ============ -->
+  <div id="hud" hidden>
+    <div class="top">
+      <div class="pill jelly" id="zonePill"><span id="zoneName">Skyfield</span><small id="onlineCount"></small></div>
+      <div class="row nowrap">
+        <button class="iconBtn jelly" id="musicBtn" title="Ambient music" aria-pressed="false">♪</button>
+        <div class="pill jelly" id="minutesPill" title="Your total focus minutes"><i class="spark">✦</i> <b id="myMinutes">0</b> min</div>
+      </div>
+    </div>
+
+    <!-- Everything at the bottom lives in ONE column, so pieces stack and can never overlap. -->
+    <div class="bottom" id="bottom">
+      <!-- shown while standing inside a Study Circle -->
+      <div class="card jelly" id="circlePanel" hidden>
+        <h3 id="circleTitle">Study Circle</h3>
+        <p class="stat" id="circleStat"></p>
+        <div id="circleIdle">
+          <p class="sub">No session running. Start one for everyone here.</p>
+          <div class="row center">
+            <button class="chip on" data-cmin="25">25 min</button>
+            <button class="chip" data-cmin="50">50 min</button>
+            <input class="mini" id="circleCustom" type="number" min="1" max="180" placeholder="custom" inputmode="numeric">
+            <button class="btn" id="circleStart">Start circle</button>
+          </div>
+        </div>
+        <div id="circleRunning" hidden>
+          <div class="big" id="circleClock">25:00</div>
+          <p class="sub" id="circleHint"></p>
+        </div>
+        <p class="sub" id="circleBlocked" hidden>You are in a solo session. Finish or stop it to join this circle's timer.</p>
+      </div>
+
+      <div class="row center" id="studyRow">
+        <button class="btn" id="studyBtn">📖 Start studying</button>
+        <div class="pill jelly timer" id="soloPill" hidden><span id="soloText">📖 25:00</span><button class="x" id="soloStop" title="Stop session">Stop</button></div>
+      </div>
+      <div class="row center jelly" id="talk">
+        <form id="chatForm" autocomplete="off">
+          <input id="chatInput" maxlength="80" placeholder="Say something…" enterkeyhint="send">
+        </form>
+        <span class="focusNote" id="focusNote" hidden>Focus mode · emotes only</span>
+        <button class="emote" data-emote="0">👋</button>
+        <button class="emote" data-emote="1">✨</button>
+        <button class="emote" data-emote="2">💪</button>
+        <button class="emote" data-emote="3">☕</button>
+      </div>
+      <div id="netStatus"></div>
+    </div>
+  </div>
+
+  <div id="toast" hidden></div>
+
+  <!-- ============ solo study dialog ============ -->
+  <div class="overlay" id="studyModal" hidden>
+    <div class="card jelly modal">
+      <h2>Start studying</h2>
+      <p class="sub">Everyone will see a little 📖 bubble over your head.</p>
+      <div class="row">
+        <button class="chip on" data-min="25">25 min</button>
+        <button class="chip" data-min="50">50 min</button>
+        <input class="mini" id="soloCustom" type="number" min="1" max="240" placeholder="custom" inputmode="numeric">
+      </div>
+      <input id="soloSubject" maxlength="24" placeholder="Subject (optional) — e.g. Algorithms">
+      <div class="row end">
+        <button class="btn ghost" id="soloCancel">Cancel</button>
+        <button class="btn" id="soloGo">Begin</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ character select ============ -->
+  <div class="overlay" id="join" hidden>
+    <div class="card jelly modal wide">
+      <h2>Choose your character</h2>
+      <div class="joinGrid">
+        <div class="stage"><canvas id="preview" width="400" height="400"></canvas></div>
+        <div class="pickers">
+          <label>Who are you?</label>
+          <div class="row" id="pickKind"></div>
+          <label>Colours</label>
+          <div class="row" id="pickScheme"></div>
+          <div class="row" id="pickSkin"></div>
+          <label>Companion</label>
+          <div class="row" id="pickPet"></div>
+          <label for="nameInput">Name</label>
+          <div class="row nowrap">
+            <input id="nameInput" maxlength="28">
+            <button class="chip" id="rollName" title="Another name">🎲</button>
+          </div>
+        </div>
+      </div>
+      <div class="row end">
+        <button class="chip" id="rollAll">Surprise me</button>
+        <button class="btn" id="enter">Step inside ✦</button>
+      </div>
+      <p class="hint">Move with WASD / arrow keys, or tap where you want to go.</p>
+    </div>
+  </div>
+
+  <!-- ============ title screen ============ -->
+  <div class="overlay clear" id="title">
+    <div class="titleBox">
+      <i class="tw" style="left:4%;top:8%">✦</i><i class="tw" style="right:6%;top:0;animation-delay:.6s">✦</i>
+      <i class="tw" style="left:16%;bottom:30%;animation-delay:1.1s">✧</i><i class="tw" style="right:14%;bottom:36%;animation-delay:1.7s">✦</i>
+      <h1 class="logo" data-text="Fablenook">Fablenook</h1>
+      <p class="tagline">a tiny storybook world for studying together</p>
+      <button class="btn big" id="start">Enter the World</button>
+    </div>
+  </div>
+
+  <!-- Supabase client (the only external script). Load order below matters. -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="config.js"></script>
+  <script src="js/world.js"></script>
+  <script src="js/fx.js"></script>
+  <script src="js/characters.js"></script>
+  <script src="js/audio.js"></script>
+  <script src="js/net.js"></script>
+  <script src="js/study.js"></script>
+  <script src="js/main.js"></script>
+</body>
+</html>

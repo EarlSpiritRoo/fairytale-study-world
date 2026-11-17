@@ -16,4 +16,12 @@ window.FABLE_CONFIG = {
   ROOM: "fablenook-main",     // everyone using the same ROOM sees each other
   BREAK_MINUTES: 5,           // shared break after each Study Circle round
   DAY_TZ_OFFSET_HOURS: 7,     // when "today" resets for circle totals (7 = midnight in Bangkok)
+
+  /* "Report an issue" form (Guide → Report an issue).
+     1. Go to https://web3forms.com and create a free access key using the inbox that should
+        RECEIVE the reports (hello@yasmine.page). Web3Forms emails the key to that address.
+     2. Paste the key below. Like the Supabase publishable key, it is safe to commit.
+     Until a key is pasted, the form falls back to opening the visitor's email app instead. */
+  WEB3FORMS_KEY: "1e34691f-b013-4482-ab16-7fa11d7531d1",
+  REPORT_EMAIL: "hello@yasmine.page",   // used for the mailto: fallback
 };

@@ -13,16 +13,26 @@
 </head>
 <body>
   <canvas id="game" aria-label="Fablenook world"></canvas>
+  <div id="labels"></div>                              <!-- name tags, study bubbles and speech bubbles (positioned from 3D) -->
+  <div id="joy" hidden><i></i></div>                   <!-- touch joystick, appears under the left thumb -->
   <div id="vignette"></div>
   <div id="fade"></div>
+  <div id="flash"></div>
 
   <!-- ============ HUD ============ -->
   <div id="hud" hidden>
     <div class="top">
       <div class="pill jelly" id="zonePill"><span id="zoneName">Skyfield</span><small id="onlineCount"></small></div>
-      <div class="row nowrap">
-        <button class="iconBtn jelly" id="musicBtn" title="Ambient music" aria-pressed="false">♪</button>
+      <div class="hudRight">
         <div class="pill jelly" id="minutesPill" title="Your total focus minutes"><i class="spark">✦</i> <b id="myMinutes">0</b> min</div>
+        <div class="row nowrap icons">
+          <button class="iconBtn jelly" id="mapBtn" title="World map: travel and see who is where">✦</button>
+          <button class="iconBtn jelly" id="actBtn" title="Actions (keys 1 to 6)">💃</button>
+          <button class="iconBtn jelly" id="snapBtn" title="Take a snapshot">📸</button>
+          <button class="iconBtn jelly" id="guideBtn" title="Guide and help">❓</button>
+          <button class="iconBtn jelly" id="musicBtn" title="Ambient music on / off" aria-pressed="false">♪</button>
+          <button class="iconBtn jelly" id="muteBtn" title="Mute all sound" aria-pressed="false">🔊</button>
+        </div>
       </div>
     </div>
 
@@ -48,6 +58,7 @@
         <p class="sub" id="circleBlocked" hidden>You are in a solo session. Finish or stop it to join this circle's timer.</p>
       </div>
 
+      <button class="btn prompt" id="prompt" hidden>Press E</button>
       <div class="row center" id="studyRow">
         <button class="btn" id="studyBtn">📖 Start studying</button>
         <div class="pill jelly timer" id="soloPill" hidden><span id="soloText">📖 25:00</span><button class="x" id="soloStop" title="Stop session">Stop</button></div>
@@ -66,7 +77,103 @@
     </div>
   </div>
 
+  <!-- ============ world map: travel + who is where ============ -->
+  <div class="card jelly" id="mapPanel" hidden>
+    <div class="row nowrap between"><h3>The Five Realms</h3><button class="x" id="mapClose">Close</button></div>
+    <div id="mapList"></div>
+    <p class="sub">Or walk through a glowing gate.</p>
+  </div>
+
+  <!-- ============ actions menu (keys 1 to 6) ============ -->
+  <div class="card jelly" id="actionMenu" hidden>
+    <button class="chip" data-act="0"><span>🧍</span> Stand <kbd>1</kbd></button>
+    <button class="chip" data-act="1"><span>🪑</span> Sit <kbd>2</kbd></button>
+    <button class="chip" data-act="2"><span>💃</span> Dance <kbd>3</kbd></button>
+    <button class="chip" data-act="3"><span>👋</span> Wave <kbd>4</kbd></button>
+    <button class="chip" data-act="4"><span>🌀</span> Spin <kbd>5</kbd></button>
+    <button class="chip" data-act="5"><span>🎉</span> Cheer <kbd>6</kbd></button>
+  </div>
+
+  <!-- ============ first-visit controls hint ============ -->
+  <div class="card jelly" id="hintCard" hidden>
+    <b>How to move ✦</b>
+    <p class="sub" id="hintText"></p>
+    <div class="row end"><button class="chip" id="hintMore">Open the guide</button><button class="btn" id="hintOk">Got it</button></div>
+  </div>
+
   <div id="toast" hidden></div>
+
+  <!-- ============ guide ============ -->
+  <div class="overlay" id="guideModal" hidden>
+    <div class="card jelly modal wide guide">
+      <div class="row nowrap between"><h2>Fablenook Guide</h2><button class="x" id="guideClose">Close</button></div>
+      <div class="row tabs" id="guideTabs">
+        <button class="chip on" data-tab="move">🧭 Move</button>
+        <button class="chip" data-tab="study">📖 Study</button>
+        <button class="chip" data-tab="travel">✦ Travel</button>
+        <button class="chip" data-tab="actions">💃 Actions &amp; snapshots</button>
+        <button class="chip" data-tab="report">💌 Report an issue</button>
+      </div>
+      <div class="pane" data-pane="move">
+        <ul>
+          <li><b>Hold the left mouse button</b> on the ground and your character walks toward the cursor. Let go to stop. A quick click walks to that spot.</li>
+          <li><b>WASD or arrow keys</b> also walk (hold Shift to stroll). Any key cancels a click-walk.</li>
+          <li><b>Look around:</b> right-drag, or two-finger drag on a trackpad. <b>Zoom:</b> scroll wheel, or pinch on a trackpad.</li>
+          <li><b>On a phone:</b> press and hold the ground to walk toward your finger, or use the joystick that appears under your left thumb. Drag with a second finger, or on empty sky, to look.</li>
+          <li><b>E</b> (or the pink prompt button) talks to characters and uses objects.</li>
+        </ul>
+      </div>
+      <div class="pane" data-pane="study" hidden>
+        <ul>
+          <li><b>Solo timer:</b> press "Start studying", pick 25 or 50 minutes or your own length, and add a subject if you like. A 📖 bubble shows everyone you are busy. It keeps counting if you switch tabs.</li>
+          <li><b>Study Circles:</b> every realm has one. Walk in and stand still: you sit down and join the shared timer. If nobody has started a round, you choose the length for everyone.</li>
+          <li>After each focus round the whole circle gets a 5-minute break together, then anyone can start the next round.</li>
+          <li>You earn only the minutes you were actually in the circle. Your total shows beside your name.</li>
+          <li><b>Focus mode:</b> while a session runs, chat is emotes only. 👋 ✨ 💪 ☕</li>
+        </ul>
+      </div>
+      <div class="pane" data-pane="travel" hidden>
+        <ul>
+          <li>There are five realms: Skyfield, Coral Lagoon, Hollyhollow, Moonlit Pavilion and Petalwood.</li>
+          <li><b>Gates:</b> each realm has four glowing gates near where you arrive. Walk through one.</li>
+          <li><b>Map:</b> the ✦ button lists every realm, how many people are there and how many are studying, with a Travel button.</li>
+          <li>You only see the people who are in the same realm as you.</li>
+        </ul>
+      </div>
+      <div class="pane" data-pane="actions" hidden>
+        <ul>
+          <li><b>Actions</b> (💃 button, or keys 1 to 6): Stand, Sit, Dance, Wave, Spin, Cheer. Everyone nearby sees them. Moving cancels an action.</li>
+          <li><b>Snapshots</b> (📸 button): takes a picture of the world in a little frame with the realm's name. Tick "Show name tags" if you want names in the shot.</li>
+          <li>On a computer you can download the picture or copy it. On a phone you can share it straight to your apps, or save it.</li>
+          <li><b>Sound:</b> ♪ turns the music on or off. 🔊 mutes everything.</li>
+        </ul>
+      </div>
+      <div class="pane" data-pane="report" hidden>
+        <form id="reportForm" autocomplete="off">
+          <p class="sub">Found a bug, or have an idea? Tell me. Name and email are optional (add an email if you would like a reply).</p>
+          <div class="row nowrap"><input id="repName" maxlength="60" placeholder="Name (optional)"><input id="repEmail" type="email" maxlength="120" placeholder="Email (optional)"></div>
+          <textarea id="repMsg" maxlength="2000" rows="4" placeholder="What happened? What did you expect?" required></textarea>
+          <input type="checkbox" id="repBot" tabindex="-1" autocomplete="off" hidden>
+          <p class="sub fine">Sent along with your message: <span id="repInfo"></span></p>
+          <div class="row end"><span class="sub" id="repStatus"></span><button class="btn" id="repSend" type="submit">Send 💌</button></div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ snapshot preview ============ -->
+  <div class="overlay" id="snapModal" hidden>
+    <div class="card jelly modal wide snap">
+      <div class="row nowrap between"><h2>Snapshot</h2><button class="x" id="snapClose">Close</button></div>
+      <img id="snapImg" alt="Snapshot of the world">
+      <label class="check"><input type="checkbox" id="snapTags"> Show name tags</label>
+      <div class="row end">
+        <button class="chip" id="snapCopy">Copy image</button>
+        <button class="chip" id="snapShare">Share</button>
+        <button class="btn" id="snapSave">Download PNG</button>
+      </div>
+    </div>
+  </div>
 
   <!-- ============ solo study dialog ============ -->
   <div class="overlay" id="studyModal" hidden>
@@ -91,7 +198,7 @@
     <div class="card jelly modal wide">
       <h2>Choose your character</h2>
       <div class="joinGrid">
-        <div class="stage"><canvas id="preview" width="400" height="400"></canvas></div>
+        <div class="stage"><canvas id="preview"></canvas></div>
         <div class="pickers">
           <label>Who are you?</label>
           <div class="row" id="pickKind"></div>
@@ -111,7 +218,7 @@
         <button class="chip" id="rollAll">Surprise me</button>
         <button class="btn" id="enter">Step inside ✦</button>
       </div>
-      <p class="hint">Move with WASD / arrow keys, or tap where you want to go.</p>
+      <p class="hint">Hold the mouse on the ground (or use WASD) to walk · right-drag to look · scroll to zoom · E to interact. On a phone: hold the ground or use the left-thumb joystick.</p>
     </div>
   </div>
 
@@ -126,15 +233,16 @@
     </div>
   </div>
 
-  <!-- Supabase client (the only external script). Load order below matters. -->
+  <!-- Three.js comes from a CDN as an ES module; the import map lets every file just say `from 'three'`. -->
+  <script type="importmap">{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.187.0/build/three.module.js" } }</script>
+  <!-- Supabase client, then the shared (non-3D) logic. Load order matters. -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="config.js"></script>
-  <script src="js/world.js"></script>
-  <script src="js/fx.js"></script>
-  <script src="js/characters.js"></script>
+  <script src="js/core.js"></script>
   <script src="js/audio.js"></script>
   <script src="js/net.js"></script>
   <script src="js/study.js"></script>
-  <script src="js/main.js"></script>
+  <!-- the 3D world -->
+  <script type="module" src="js3d/main.js"></script>
 </body>
 </html>

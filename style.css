@@ -181,3 +181,89 @@ input.mini { width: 88px; }
 }
 @media (max-height: 520px) { #circlePanel .sub { display: none; } .big { font-size: 1.8rem; } }
 @media (prefers-reduced-motion: reduce) { .jelly, h2, .big, .logo, .tw, .spark, #toast { animation: none; } #fade { transition: none; } }
+
+/* ============================================================
+   3D additions: floating labels, interact prompt, joystick
+   ============================================================ */
+#labels { position: fixed; inset: 0; pointer-events: none; overflow: hidden; }
+.tag { position: absolute; left: 0; top: 0; display: flex; flex-direction: column; align-items: center; gap: 3px; will-change: transform; transform-origin: 50% 100%; white-space: nowrap; }
+.tag .nm { font-family: var(--label); font-weight: 600; font-size: 12.5px; color: var(--ink); background: rgba(255, 255, 255, .9); border-radius: 999px; padding: 2px 10px; box-shadow: 0 2px 6px rgba(90, 70, 160, .2); }
+.tag.npc .nm { font-weight: 500; color: #7a6aa8; background: rgba(255, 255, 255, .66); }
+.tag .stud { font-family: var(--label); font-weight: 600; font-size: 12.5px; color: #8a3f8f; border-radius: 999px; padding: 3px 11px; animation: none;
+  background: linear-gradient(180deg, rgba(255, 220, 243, .97), rgba(224, 204, 255, .95)) padding-box, var(--holo) border-box; font-variant-numeric: tabular-nums; }
+.tag .say { font-family: var(--label); font-weight: 500; font-size: 13.5px; color: var(--ink); border-radius: 16px; padding: 6px 12px; max-width: 250px; white-space: normal; text-align: center; animation: none;
+  background: linear-gradient(180deg, #fff, #f3eaff) padding-box, var(--holo) border-box; }
+.tag .say.emote { font-size: 24px; padding: 0; width: 46px; height: 46px; border-radius: 50%; display: grid; place-items: center; line-height: 1; text-align: center; }   /* emoji sits dead centre */
+.tag .say.emote[hidden] { display: none; }
+.tag .say.emote::before { display: none; }
+.tag.plaque { gap: 0; padding: 7px 16px 8px; border-radius: 20px; text-align: center; }
+.tag.plaque b { font-family: var(--display); font-weight: 400; font-size: 18px; color: var(--zone); display: block; }
+.tag.plaque span { font-family: var(--label); font-weight: 600; font-size: 12.5px; color: var(--ink); display: block; }
+.tag.plaque small { font-family: var(--label); font-weight: 500; font-size: 12px; color: var(--ink-soft); display: block; }
+.prompt { font-size: .95rem; padding: 8px 18px; animation: promptBob 1.2s ease-in-out infinite; }
+@keyframes promptBob { 50% { transform: translateY(-4px); } }
+#joy { position: fixed; width: 116px; height: 116px; margin: -58px 0 0 -58px; border-radius: 50%; pointer-events: none;
+  border: 2.5px solid rgba(255, 255, 255, .85); background: radial-gradient(circle, rgba(255, 255, 255, .22), rgba(217, 184, 255, .3)); box-shadow: inset 0 3px 8px rgba(255, 255, 255, .6), 0 4px 14px rgba(120, 90, 220, .25); }
+#joy i { position: absolute; left: 50%; top: 50%; width: 50px; height: 50px; margin: -25px 0 0 -25px; border-radius: 50%; border: 2px solid #fff;
+  background: linear-gradient(180deg, #ffd3ef, #ff8fd0); box-shadow: inset 0 3px 3px rgba(255, 255, 255, .8), 0 3px 8px rgba(240, 86, 178, .4); }
+#game { cursor: grab; } #game:active { cursor: grabbing; }
+.fatal { position: fixed; inset: 0; display: grid; place-items: center; padding: 24px; text-align: center; font-family: var(--label); color: var(--ink); background: #ffeefa; }
+#game:focus { outline: none; }
+
+/* ---------- world map ---------- */
+#mapPanel { position: fixed; top: calc(60px + env(safe-area-inset-top)); right: 10px; width: min(330px, calc(100vw - 20px)); display: flex; flex-direction: column; gap: 8px; z-index: 5; }
+.row.between { justify-content: space-between; }
+.mapRow { display: flex; align-items: center; gap: 10px; padding: 6px 8px; border-radius: 16px; background: rgba(255, 255, 255, .55); margin-top: 6px; }
+.mapRow.here { background: rgba(255, 255, 255, .92); box-shadow: 0 0 0 2px #fff; }
+.mapRow i { width: 16px; height: 16px; border-radius: 50%; flex: none; box-shadow: inset 0 2px 2px rgba(255, 255, 255, .8), 0 0 8px currentColor; border: 2px solid #fff; }
+.mapRow div { flex: 1; min-width: 0; }
+.mapRow b { display: block; font-family: var(--label); font-weight: 600; }
+.mapRow small { color: var(--ink-soft); font-size: .78rem; }
+.mapRow .chip { padding: 5px 12px; font-size: .85rem; }
+.mapRow .chip:disabled { opacity: .55; cursor: default; }
+.tag.gate .nm { font-family: var(--display); font-weight: 400; font-size: 15px; background: rgba(255, 255, 255, .92); padding: 3px 12px; }
+#fade { transition: opacity .4s ease; }
+
+/* ============================================================
+   HUD buttons, actions menu, guide, snapshot, first-visit hint
+   ============================================================ */
+.hudRight { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
+.icons { gap: 6px; }
+.iconBtn { position: relative; font-family: var(--label); line-height: 1; padding: 0; }
+#muteBtn[aria-pressed="true"] { opacity: .8; }
+#mapPanel { top: calc(110px + env(safe-area-inset-top)); }
+#actionMenu { position: fixed; top: calc(110px + env(safe-area-inset-top)); right: 10px; display: grid; grid-template-columns: 1fr 1fr; gap: 7px; padding: 12px; z-index: 5; }
+#actionMenu .chip { display: flex; align-items: center; gap: 6px; text-align: left; }
+#actionMenu .chip span { font-size: 1.15rem; }
+kbd { margin-left: auto; font-family: var(--label); font-size: .72rem; font-weight: 600; color: var(--ink-soft); background: rgba(255, 255, 255, .8); border: 1.5px solid #e3d8ff; border-bottom-width: 3px; border-radius: 7px; padding: 0 6px; }
+#hintCard { position: fixed; left: 50%; top: 14%; transform: translateX(-50%); width: min(400px, calc(100vw - 24px)); z-index: 6; animation: pop .5s cubic-bezier(.3, 1.6, .5, 1); }
+#hintCard b { font-family: var(--display); font-weight: 400; font-size: 1.2rem; color: var(--zone); }
+.overlay { z-index: 20; }
+.guide { max-height: calc(100vh - 28px); }
+.tabs { gap: 6px; }
+.tabs .chip { padding: 6px 11px; font-size: .88rem; }
+.pane { overflow: auto; max-height: 52vh; padding-right: 4px; }
+.pane ul { margin: 4px 0; padding-left: 1.2em; display: flex; flex-direction: column; gap: 8px; line-height: 1.4; font-weight: 600; }
+.pane li::marker { content: '✦  '; color: var(--pink-deep); }
+.pane b { color: var(--pink-deep); }
+#reportForm { display: flex; flex-direction: column; gap: 8px; }
+#reportForm input { flex: 1; }
+textarea { font: inherit; color: inherit; border: 2px solid #fff; border-radius: 18px; padding: 10px 14px; outline: none; resize: vertical; min-height: 84px; background: linear-gradient(180deg, #f6eeff, #ffffff); box-shadow: inset 0 2px 5px rgba(150, 120, 220, .22); }
+textarea:focus { border-color: var(--pink); box-shadow: inset 0 2px 5px rgba(150, 120, 220, .22), 0 0 0 3px rgba(255, 143, 208, .3); }
+.fine { font-size: .74rem; word-break: break-word; }
+#repStatus { margin-right: auto; font-weight: 800; }
+.snap img { display: block; max-width: 100%; max-height: 56vh; margin: 0 auto; border-radius: 16px; box-shadow: 0 8px 24px rgba(120, 90, 220, .3); }
+.check { display: flex; align-items: center; gap: 8px; font-weight: 800; font-size: .9rem; cursor: pointer; }
+.check input { width: 18px; height: 18px; accent-color: var(--pink-deep); padding: 0; box-shadow: none; }
+#flash { position: fixed; inset: 0; background: #fff; opacity: 0; pointer-events: none; z-index: 30; }
+#flash.on { animation: flash .35s ease-out; }
+@keyframes flash { from { opacity: .85; } to { opacity: 0; } }
+@media (max-width: 560px) {
+  .iconBtn { width: 36px; height: 36px; font-size: 1.02rem; }
+  .icons { gap: 4px; }
+  #reportForm .row.nowrap { flex-wrap: wrap; }
+  .pane { max-height: 46vh; }
+}
+/* panels that float over the moving 3D view skip the background blur (it is costly on phones); low-quality mode drops it everywhere */
+#hintCard, #actionMenu, #mapPanel, #circlePanel { -webkit-backdrop-filter: none; backdrop-filter: none; }
+body.lowq .card, body.lowq .overlay { -webkit-backdrop-filter: none; backdrop-filter: none; }

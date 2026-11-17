@@ -5,18 +5,20 @@
    FN.Audio.unlock()        call from a click (browsers require it)
    FN.Audio.sfx(name)       'click' 'pop' 'sparkle' 'portal' 'start' 'chime'
    FN.Audio.setMusic(bool)  soft generative ambient loop (off by default)
+   FN.Audio.setMuted(bool)  master mute for music + effects (remembered)
    ============================================================ */
 (function (FN) {
   'use strict';
   let ac = null, master = null, musicGain = null, delay = null, musicTimer = null, nextNote = 0, step = 0;
   const lastPlayed = {};
-  const A = FN.Audio = { musicOn: false };
+  const A = FN.Audio = { musicOn: false, muted: false };
+  try { A.muted = localStorage.getItem('fablenook.muted') === '1'; } catch (e) { /* ignore */ }
 
   A.unlock = () => {
     try {
       if (!ac) {
         ac = new (window.AudioContext || window.webkitAudioContext)();
-        master = ac.createGain(); master.gain.value = 0.9; master.connect(ac.destination);
+        master = ac.createGain(); master.gain.value = A.muted ? 0 : 0.9; master.connect(ac.destination);
         // a dreamy echo shared by the music
         delay = ac.createDelay(1); delay.delayTime.value = 0.42;
         const fb = ac.createGain(); fb.gain.value = 0.38; delay.connect(fb); fb.connect(delay);
@@ -79,6 +81,12 @@
     musicGain.gain.cancelScheduledValues(ac.currentTime);
     musicGain.gain.linearRampToValueAtTime(on ? 0.55 : 0, ac.currentTime + (on ? 1.5 : 0.4));
     if (on) { nextNote = ac.currentTime + 0.1; schedule(); musicTimer = setInterval(schedule, 400); }
+  };
+  // master mute: silences music AND effects, remembered between visits
+  A.setMuted = (m) => {
+    A.muted = !!m;
+    try { localStorage.setItem('fablenook.muted', m ? '1' : '0'); } catch (e) { /* ignore */ }
+    if (ac) { master.gain.cancelScheduledValues(ac.currentTime); master.gain.setTargetAtTime(m ? 0 : 0.9, ac.currentTime, 0.05); }
   };
   A.wantsMusic = () => { try { return localStorage.getItem('fablenook.music') === '1'; } catch (e) { return false; } };
 })(window.FN);

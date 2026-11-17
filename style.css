@@ -74,9 +74,10 @@ button { font: inherit; color: inherit; cursor: pointer; border: 0; }
 }
 .btn::before { content: ''; position: absolute; left: 9%; right: 9%; top: 3px; height: 42%; border-radius: 999px; background: linear-gradient(180deg, rgba(255, 255, 255, .85), rgba(255, 255, 255, .05)); pointer-events: none; }
 .btn::after, .chip::after, .emote::after, .iconBtn::after { content: '✦'; position: absolute; right: -4px; top: -9px; font-size: 1.1rem; color: #fff; text-shadow: 0 0 6px #ff9fd6, 0 0 2px #b48cff; opacity: 0; pointer-events: none; }
-.btn:hover, .chip:hover, .emote:hover, .iconBtn:hover { transform: translateY(-2px) scale(1.03); filter: brightness(1.06) saturate(1.1); }
+/* Hover / press feedback must not move or shrink the button: a moved hit box makes presses near the edge miss. */
+.btn:hover, .chip:hover, .emote:hover, .iconBtn:hover, .x:hover { filter: brightness(1.07) saturate(1.12) drop-shadow(0 0 6px rgba(255, 170, 225, .75)); }
 .btn:hover::after, .chip:hover::after, .emote:hover::after, .iconBtn:hover::after { animation: twinkle .9s ease-in-out infinite; }
-.btn:active, .chip:active { transform: translateY(1px) scale(.97); }
+.btn:active, .chip:active, .iconBtn:active, .x:active { filter: brightness(.93) saturate(1.15); }
 .btn.ghost { color: var(--ink-soft); text-shadow: none; background: linear-gradient(180deg, #fff, #efe6ff); box-shadow: inset 0 2px 2px #fff, inset 0 -6px 10px rgba(201, 173, 255, .3), 0 4px 10px rgba(130, 100, 220, .2); }
 .btn.big { font-family: var(--display); font-size: 1.5rem; padding: 15px 38px; letter-spacing: .02em; }
 
@@ -119,14 +120,14 @@ input.mini { width: 88px; }
   background: var(--holo); background-size: 250% 100%; -webkit-background-clip: text; background-clip: text; color: transparent; animation: holo 5s linear infinite;
   filter: drop-shadow(0 1px 0 #fff) drop-shadow(0 2px 4px rgba(150, 100, 230, .45)); -webkit-text-stroke: 1.5px rgba(100, 70, 200, .8); }
 .timer { font-family: var(--label); font-weight: 600; font-size: 1.05rem; font-variant-numeric: tabular-nums; padding-right: 6px; }
-.x { font-family: var(--label); background: linear-gradient(180deg, #ffe1f3, #ffc2e6); color: var(--pink-deep); border-radius: 999px; padding: 5px 12px; font-weight: 600; font-size: .85rem; border: 1.5px solid #fff; }
+.x { position: relative; font-family: var(--label); background: linear-gradient(180deg, #ffe1f3, #ffc2e6); color: var(--pink-deep); border-radius: 999px; padding: 5px 12px; font-weight: 600; font-size: .85rem; border: 1.5px solid #fff; }
 #talk { border-radius: 999px; padding: 5px 8px; flex-wrap: nowrap; max-width: 100%; }
 #chatForm { display: flex; min-width: 0; }
 #chatInput { width: 210px; padding: 7px 12px; }
 .focusNote { font-size: .82rem; font-weight: 800; color: var(--ink-soft); padding: 0 8px; white-space: nowrap; }
 .emote { position: relative; width: 38px; height: 38px; border-radius: 50%; font-size: 1.15rem; flex: none; border: 2px solid #fff;
   background: linear-gradient(180deg, #fff, #efe6ff); box-shadow: inset 0 2px 1px #fff, inset 0 -4px 6px rgba(201, 173, 255, .35), 0 2px 6px rgba(130, 100, 220, .2); transition: transform .12s; }
-.emote:active { transform: scale(1.25) rotate(-8deg); }
+.emote:active { filter: brightness(.93) saturate(1.15); }
 #netStatus { font-size: .74rem; font-weight: 800; color: #fff; text-shadow: 0 1px 3px rgba(60, 40, 120, .7); min-height: 1em; text-align: center; }
 
 #toast { position: fixed; left: 50%; top: 20%; transform: translateX(-50%); border-radius: 28px; padding: 14px 28px; text-align: center; pointer-events: none; max-width: 90vw;
@@ -267,3 +268,87 @@ textarea:focus { border-color: var(--pink); box-shadow: inset 0 2px 5px rgba(150
 /* panels that float over the moving 3D view skip the background blur (it is costly on phones); low-quality mode drops it everywhere */
 #hintCard, #actionMenu, #mapPanel, #circlePanel { -webkit-backdrop-filter: none; backdrop-filter: none; }
 body.lowq .card, body.lowq .overlay { -webkit-backdrop-filter: none; backdrop-filter: none; }
+
+/* ============================================================ round 6: hit areas, ⚙️ menu, phone layout
+   Every button gets a hit area of at least 44 x 44 px. Decorative layers never take clicks. */
+.jelly::before, .btn::before, .btn::after, .chip::after, .emote::after, .iconBtn::after, .tw, .spark, .badge, .menuItem .ico, .menuItem .lbl, .menuItem .state, #actionMenu .chip span, kbd { pointer-events: none; }
+.chip::before, .x::before, .emote::before, .swatch::before { content: ''; position: absolute; inset: -6px -4px; border-radius: inherit; }   /* invisible: widens the hit area */
+.emote::before { inset: -6px -4px; }
+.x::before { inset: -9px -6px; }               /* Close buttons are 28px tall: widen to 46 */
+.iconBtn { width: 44px; height: 44px; font-size: 1.2rem; }
+.icons { display: flex; flex-wrap: nowrap; gap: 8px; }
+
+/* top bar: realm pill on one line, never wraps */
+#hud { padding: calc(10px + env(safe-area-inset-top)) calc(10px + env(safe-area-inset-right)) calc(10px + env(safe-area-inset-bottom)) calc(10px + env(safe-area-inset-left)); }
+#hud .top { flex-wrap: nowrap; }
+#zonePill { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; flex: 0 1 auto; line-height: 1.5; }
+.hudRight { flex: none; }
+
+/* ⚙️ dropdown */
+#setBtn .badge { position: absolute; right: -6px; bottom: -6px; font-size: .78rem; font-style: normal; width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center;
+  background: linear-gradient(180deg, #fff, #ffe1f3); border: 1.5px solid #fff; box-shadow: 0 2px 5px rgba(130, 100, 220, .35); }
+#setMenu, #actionMenu, #mapPanel { position: fixed; top: calc(118px + env(safe-area-inset-top)); right: calc(10px + env(safe-area-inset-right)); z-index: 5;
+  max-height: calc(100vh - 128px - env(safe-area-inset-top) - env(safe-area-inset-bottom)); max-height: calc(100dvh - 128px - env(safe-area-inset-top) - env(safe-area-inset-bottom)); overflow: auto; }
+#setMenu { display: flex; flex-direction: column; gap: 8px; padding: 12px; width: 230px; -webkit-backdrop-filter: none; backdrop-filter: none; }
+.menuItem { display: flex; align-items: center; gap: 10px; min-height: 44px; text-align: left; width: 100%; }
+.menuItem .ico { width: 24px; text-align: center; font-size: 1.15rem; }
+.menuItem .lbl { flex: 1; }
+.menuItem .state { font-size: .78rem; color: var(--ink-soft); }
+.menuItem[aria-pressed="true"] .state { color: var(--pink-deep); }
+.mapRow .chip { min-height: 40px; min-width: 76px; }
+
+/* modals respect the notch / home bar */
+.overlay { padding: max(14px, env(safe-area-inset-top)) max(14px, env(safe-area-inset-right)) max(14px, env(safe-area-inset-bottom)) max(14px, env(safe-area-inset-left)); }
+
+/* chat bar always fits: the input keeps its whole placeholder, emotes shrink a little */
+#talk { width: auto; max-width: 100%; }
+#chatForm { flex: 1 1 auto; }
+#chatInput { width: 210px; min-width: 132px; flex: 1 1 auto; }
+
+/* ---------- phones, portrait ---------- */
+@media (max-width: 560px) {
+  #zonePill { font-size: 1rem; padding: 7px 12px; }
+  #zonePill small { font-size: .74rem; }
+  .hereTxt { display: none; }
+  .hudRight { gap: 8px; }
+  .icons { flex-direction: column; gap: 8px; }           /* the 4 buttons stack under the minutes pill */
+  .iconBtn { width: 44px; height: 44px; font-size: 1.12rem; }
+  #setMenu, #actionMenu, #mapPanel { top: calc(60px + env(safe-area-inset-top)); right: calc(62px + env(safe-area-inset-right)); left: auto;
+    max-height: calc(100dvh - 70px - env(safe-area-inset-top) - env(safe-area-inset-bottom)); }
+  #mapPanel { width: min(330px, calc(100vw - 74px - env(safe-area-inset-left) - env(safe-area-inset-right))); padding: 12px; }
+  #actionMenu { width: min(300px, calc(100vw - 74px)); }
+  #actionMenu .chip { padding: 7px 10px; }
+  #setMenu { width: min(230px, calc(100vw - 74px)); }
+  .mapRow { gap: 8px; padding: 6px; }
+  .mapRow .chip { min-width: 70px; padding: 5px 10px; }
+  #talk { gap: 6px; padding: 5px 7px; }
+  #chatInput { width: auto; min-width: 132px; }
+  .emote { width: 34px; height: 34px; font-size: 1.05rem; }
+  .emote::before { inset: -5px -4px; }
+}
+@media (max-width: 380px) {
+  #talk { gap: 5px; padding: 5px 6px; }
+  .emote { width: 32px; height: 32px; font-size: 1rem; }
+  .emote::before { inset: -6px -3px; }
+}
+/* ---------- phones, landscape: short screens ---------- */
+@media (max-height: 500px) {
+  #setMenu, #actionMenu, #mapPanel { top: calc(60px + env(safe-area-inset-top)); right: calc(10px + env(safe-area-inset-right)); max-height: calc(100dvh - 70px - env(safe-area-inset-top) - env(safe-area-inset-bottom)); }
+  .hudRight { flex-direction: row-reverse; align-items: flex-start; }     /* minutes pill and buttons share one line */
+  .icons { flex-direction: row; }
+  #mapPanel { width: min(600px, calc(100vw - 20px - env(safe-area-inset-left) - env(safe-area-inset-right))); padding: 10px 12px; gap: 4px; }
+  #mapList { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }      /* five realms in two columns: no scrolling */
+  #mapList .mapRow { margin-top: 0; }
+  #mapPanel > .sub { display: none; }
+}
+@media (max-height: 500px) and (max-width: 700px) {
+  .hereTxt { display: none; }
+}
+.tabs { row-gap: 12px; }
+.tabs .chip { min-height: 38px; }                  /* + 6px hit extenders = 44px, and wrapped rows don't steal each other's edges */
+#setMenu { width: 252px; }
+.menuItem .lbl { white-space: nowrap; }
+@media (max-width: 560px) { #setMenu { width: min(252px, calc(100vw - 74px)); } }
+/* the containers are click-through: only the pills and buttons catch presses, the empty space between them belongs to the world */
+#hud .top > .hudRight, .icons { pointer-events: none; }
+.hudRight > *, .icons > * { pointer-events: auto; }

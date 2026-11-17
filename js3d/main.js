@@ -195,7 +195,7 @@ $('enter').onclick = () => {
   env.burst(actor.pos.clone().setY(1), 20);
   Net.connect(me.key); pushPresence(); uiTick(); maybeHint();
 };
-function setMusic(on) { Audio.setMusic(on); $('musicBtn').setAttribute('aria-pressed', on ? 'true' : 'false'); }
+function setMusic(on) { Audio.setMusic(on); $('musicBtn').setAttribute('aria-pressed', on ? 'true' : 'false'); $('musicState').textContent = on ? 'on' : 'off'; }
 $('musicBtn').onclick = () => { Audio.unlock(); setMusic(!Audio.musicOn); };
 document.addEventListener('click', (e) => { if (e.target.closest('button') && !e.target.closest('#pickKind,#pickScheme,#pickSkin,#pickPet,#start,#enter')) Audio.sfx('click'); });
 
@@ -518,10 +518,10 @@ document.querySelectorAll('[data-emote]').forEach((b) => {
 // ============================================================ 7b. HUD EXTRAS: mute, actions, guide, report, snapshot, hint
 const CFG = window.FABLE_CONFIG || {};
 const coarse = () => matchMedia('(pointer: coarse)').matches;
-const closePopups = () => { $('mapPanel').hidden = true; $('actionMenu').hidden = true; };
+const closePopups = () => { $('mapPanel').hidden = true; $('actionMenu').hidden = true; $('setMenu').hidden = true; };
 
 // ----- mute everything (music + effects), remembered by audio.js -----
-function showMuted() { $('muteBtn').textContent = Audio.muted ? '🔇' : '🔊'; $('muteBtn').setAttribute('aria-pressed', Audio.muted ? 'true' : 'false'); $('muteBtn').title = Audio.muted ? 'Sound is muted: click to unmute' : 'Mute all sound'; }
+function showMuted() { $('muteIco').textContent = Audio.muted ? '🔇' : '🔊'; $('muteState').textContent = Audio.muted ? 'on' : 'off'; $('muteBadge').hidden = !Audio.muted; $('muteBtn').setAttribute('aria-pressed', Audio.muted ? 'true' : 'false'); $('muteBtn').title = Audio.muted ? 'Sound is muted: click to unmute' : 'Mute all sound'; }
 $('muteBtn').onclick = () => { Audio.unlock(); Audio.setMuted(!Audio.muted); showMuted(); };
 showMuted();
 
@@ -538,6 +538,7 @@ function openGuide(tab) {
 }
 document.querySelectorAll('#guideTabs .chip').forEach((c) => { c.onclick = () => openGuide(c.dataset.tab); });
 $('guideBtn').onclick = () => openGuide('move');
+$('setBtn').onclick = () => { const m = $('setMenu'), open = m.hidden; closePopups(); m.hidden = !open; };
 $('guideClose').onclick = () => { $('guideModal').hidden = true; canvas.focus({ preventScroll: true }); };
 
 // ----- report an issue: Web3Forms if a key is set in config.js, otherwise the visitor's own email app -----
@@ -612,6 +613,35 @@ $('snapSave').onclick = () => { if (!snapUrl) return; const a = document.createE
 $('snapCopy').onclick = async () => { try { await navigator.clipboard.write([new ClipboardItem({ 'image/png': snapBlob })]); toast('Copied ✨', 'Paste it anywhere.'); } catch (e) { toast('Could not copy', 'Use Download instead.'); } };
 $('snapShare').onclick = async () => { try { await navigator.share({ files: [new File([snapBlob], 'fablenook-' + zone.id + '.png', { type: 'image/png' })], title: 'Fablenook', text: 'Studying in ' + zone.name + ' ✦' }); } catch (e) { /* the visitor closed the share sheet */ } };
 
+// ----- click / tap outside or Esc closes popups; that press never reaches the world -----
+const POPUPS = [                                                     // topmost first
+  { el: 'snapModal', card: '#snapModal .card', close: () => $('snapClose').click() },
+  { el: 'guideModal', card: '#guideModal .card', close: () => closeGuideSafely() },
+  { el: 'mapPanel', btn: 'mapBtn' }, { el: 'actionMenu', btn: 'actBtn' }, { el: 'setMenu', btn: 'setBtn' },
+];
+const reportDirty = () => !$('guideModal').hidden && !document.querySelector('#guideModal [data-pane="report"]').hidden && !!($('repMsg').value.trim() || $('repName').value.trim() || $('repEmail').value.trim());
+function closeGuideSafely() {                                       // keep a half-written report unless the visitor says to throw it away
+  if (reportDirty()) { if (!confirm('Discard your message?')) return false; $('repMsg').value = ''; $('repName').value = ''; $('repEmail').value = ''; $('repStatus').textContent = ''; }
+  $('guideClose').click(); return true;
+}
+function closePopup(p) { if (p.close) p.close(); else $(p.el).hidden = true; }
+window.addEventListener('pointerdown', (e) => {
+  const open = POPUPS.filter((p) => !$(p.el).hidden); if (!open.length) return;
+  let swallow = false;
+  for (const p of open) {
+    const inside = e.target.closest(p.card || '#' + p.el), own = p.btn && e.target.closest('#' + p.btn);
+    if (inside || own) continue;                                    // its own button toggles it as before
+    closePopup(p); swallow = true;
+  }
+  // A press that only closed a popup must not walk the character or turn the camera.
+  if (swallow && (e.target === canvas || e.target.classList.contains('overlay'))) { e.stopPropagation(); e.preventDefault(); }
+}, true);                                                           // capture: runs before the game's own listeners
+window.addEventListener('keydown', (e) => {
+  if (e.key !== 'Escape') return;
+  const top = POPUPS.find((p) => !$(p.el).hidden); if (!top) return;
+  e.preventDefault(); closePopup(top); if ($(top.el).hidden) canvas.focus({ preventScroll: true });
+});
+
 // ----- first-visit controls hint -----
 function maybeHint() {
   let seen = false; try { seen = localStorage.getItem('fablenook.hinted') === '1'; } catch (e) { /* ignore */ }
@@ -631,7 +661,8 @@ function uiTick() {
   const now = Date.now();
   $('myMinutes').textContent = Study.total();
   const counts = zoneCounts();
-  $('onlineCount').textContent = Net.isOnline() ? counts[zone.id].here + ' here · ' + counts.all + ' online' : '';
+  const oc = Net.isOnline() ? ' · <span class="hereTxt">' + counts[zone.id].here + ' here · </span>' + counts.all + ' online' : '';   // phones hide the "here" part
+  if ($('onlineCount').innerHTML !== oc) $('onlineCount').innerHTML = oc;
   if (!$('mapPanel').hidden) drawMap(counts);
   const solo = Study.solo, standing = inCircle(actor.pos);
   $('studyBtn').hidden = !!solo || standing; $('soloPill').hidden = !solo;
@@ -660,14 +691,22 @@ function zoneCounts() {
   return c;
 }
 function drawMap(counts) {
-  const list = $('mapList'); list.innerHTML = '';
-  for (const id of ZONE_ORDER) {
-    const row = document.createElement('div'); row.className = 'mapRow' + (id === zone.id ? ' here' : '');
-    const dot = document.createElement('i'); dot.style.background = ZONES[id].accent;
-    const txt = document.createElement('div'), nm = document.createElement('b'), sub = document.createElement('small');
-    nm.textContent = ZONES[id].name; nm.style.color = ZONES[id].ui; sub.textContent = counts[id].here + ' here · ' + counts[id].studying + ' studying'; txt.append(nm, sub);
-    const go = document.createElement('button'); go.className = 'chip'; go.textContent = id === zone.id ? 'You are here' : 'Travel'; go.disabled = id === zone.id; go.onclick = () => travel(id);
-    row.append(dot, txt, go); list.appendChild(row);
+  const list = $('mapList');
+  if (list.children.length !== ZONE_ORDER.length) {          // build the rows once; later calls only update text
+    list.innerHTML = '';
+    for (const id of ZONE_ORDER) {
+      const row = document.createElement('div'); row.className = 'mapRow'; row.dataset.zone = id;
+      const dot = document.createElement('i'); dot.style.background = ZONES[id].accent;
+      const txt = document.createElement('div'), nm = document.createElement('b'), sub = document.createElement('small');
+      nm.textContent = ZONES[id].name; nm.style.color = ZONES[id].ui; txt.append(nm, sub);
+      const go = document.createElement('button'); go.className = 'chip'; go.onclick = () => { if (id !== zone.id) travel(id); };
+      row.append(dot, txt, go); list.appendChild(row);
+    }
+  }
+  for (const row of list.children) {
+    const id = row.dataset.zone, here = id === zone.id, go = row.querySelector('button'), sub = row.querySelector('small');
+    const t = counts[id].here + ' here · ' + counts[id].studying + ' studying'; if (sub.textContent !== t) sub.textContent = t;
+    row.classList.toggle('here', here); go.disabled = here; const g = here ? 'You are here' : 'Travel'; if (go.textContent !== g) go.textContent = g;
   }
 }
 $('mapBtn').onclick = () => { const p = $('mapPanel'), open = p.hidden; closePopups(); p.hidden = !open; if (open) drawMap(zoneCounts()); };

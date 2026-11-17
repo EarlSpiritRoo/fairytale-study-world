@@ -21,9 +21,9 @@ Travel by walking through a glowing gate (each realm has four, near where you ar
 | ✦ Map | every realm, who is there, one-tap travel |
 | 💃 Actions | Stand, Sit (anywhere), Dance, Wave, Spin, Cheer. Everyone in the realm sees them. Moving cancels an action; Wave, Spin and Cheer end by themselves |
 | 📸 Snapshot | a framed picture of the game view with the realm's name and date. Name tags are optional. Desktop: Download PNG or Copy image. Phone: Share (the phone's share sheet) or Save |
-| ❓ Guide | tabs: How to move, Study Circles and solo timer, Travelling between realms, Actions and snapshots, Report an issue |
-| ♪ Music | music on / off |
-| 🔊 / 🔇 Mute | every sound (music and effects); remembered on this device |
+| ⚙️ Menu | ❓ Guide (How to move, Study Circles and solo timer, Travelling, Actions and snapshots, Report an issue) · ♪ Music on / off · 🔇 Mute all sound (remembered on this device; a small 🔇 badge sits on ⚙️ while muted) |
+
+On phones the four buttons stack under the minutes pill; in landscape they share the top line. Every button's hit area is at least 44 × 44 px, and hover / press effects never move it. Clicking or tapping outside any popup, or pressing Esc, closes it; that press does not walk or turn the camera. A half-written issue report asks "Discard your message?" first.
 
 A small controls hint appears on the first visit only.
 

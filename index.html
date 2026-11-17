@@ -25,13 +25,11 @@
       <div class="pill jelly" id="zonePill"><span id="zoneName">Skyfield</span><small id="onlineCount"></small></div>
       <div class="hudRight">
         <div class="pill jelly" id="minutesPill" title="Your total focus minutes"><i class="spark">✦</i> <b id="myMinutes">0</b> min</div>
-        <div class="row nowrap icons">
-          <button class="iconBtn jelly" id="mapBtn" title="World map: travel and see who is where">✦</button>
-          <button class="iconBtn jelly" id="actBtn" title="Actions (keys 1 to 6)">💃</button>
-          <button class="iconBtn jelly" id="snapBtn" title="Take a snapshot">📸</button>
-          <button class="iconBtn jelly" id="guideBtn" title="Guide and help">❓</button>
-          <button class="iconBtn jelly" id="musicBtn" title="Ambient music on / off" aria-pressed="false">♪</button>
-          <button class="iconBtn jelly" id="muteBtn" title="Mute all sound" aria-pressed="false">🔊</button>
+        <div class="icons">
+          <button class="iconBtn jelly" id="mapBtn" title="World map: travel and see who is where" aria-label="World map" aria-controls="mapPanel">✦</button>
+          <button class="iconBtn jelly" id="actBtn" title="Actions (keys 1 to 6)" aria-label="Actions" aria-controls="actionMenu">💃</button>
+          <button class="iconBtn jelly" id="snapBtn" title="Take a snapshot" aria-label="Snapshot">📸</button>
+          <button class="iconBtn jelly" id="setBtn" title="Guide, music and sound" aria-label="Settings" aria-controls="setMenu">⚙️<i class="badge" id="muteBadge" hidden>🔇</i></button>
         </div>
       </div>
     </div>
@@ -94,6 +92,13 @@
     <button class="chip" data-act="5"><span>🎉</span> Cheer <kbd>6</kbd></button>
   </div>
 
+  <!-- ============ ⚙️ menu: guide, music, mute ============ -->
+  <div class="card jelly" id="setMenu" hidden>
+    <button class="chip menuItem" id="guideBtn"><span class="ico">❓</span><span class="lbl">Guide &amp; help</span></button>
+    <button class="chip menuItem" id="musicBtn" aria-pressed="false"><span class="ico">♪</span><span class="lbl">Music</span><span class="state" id="musicState">off</span></button>
+    <button class="chip menuItem" id="muteBtn" aria-pressed="false"><span class="ico" id="muteIco">🔊</span><span class="lbl">Mute all sound</span><span class="state" id="muteState">off</span></button>
+  </div>
+
   <!-- ============ first-visit controls hint ============ -->
   <div class="card jelly" id="hintCard" hidden>
     <b>How to move ✦</b>
@@ -145,7 +150,7 @@
           <li><b>Actions</b> (💃 button, or keys 1 to 6): Stand, Sit, Dance, Wave, Spin, Cheer. Everyone nearby sees them. Moving cancels an action.</li>
           <li><b>Snapshots</b> (📸 button): takes a picture of the world in a little frame with the realm's name. Tick "Show name tags" if you want names in the shot.</li>
           <li>On a computer you can download the picture or copy it. On a phone you can share it straight to your apps, or save it.</li>
-          <li><b>Sound:</b> ♪ turns the music on or off. 🔊 mutes everything.</li>
+          <li><b>Sound:</b> the ⚙️ menu has the Guide, music on / off, and Mute all sound (remembered on this device).</li>
         </ul>
       </div>
       <div class="pane" data-pane="report" hidden>

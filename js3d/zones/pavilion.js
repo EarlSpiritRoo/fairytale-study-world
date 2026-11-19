@@ -3,17 +3,22 @@
 import * as THREE from 'three';
 import { makeKit, V } from '../kit.js';
 import { toon, holo, glow, flat, THEME } from '../toon.js';
-import { waterMat } from '../surfaces.js';
+import { calmWaterMat } from '../surfaces.js';
 
 export function build() {
   const K = makeKit('pavilion', 53), { R, G, add, solid, post, wall, batch, animated } = K;
   const MOON = [0.35, 0.42, -0.84], GRASS = '#9fd6b6', WARM = '#ffd9a0';
-  add(new THREE.CircleGeometry(170, 48).rotateX(-Math.PI / 2), waterMat(MOON), V(0, -0.55, 0));        // the lake (not solid: you cannot walk on it)
+  // the lake (not solid: you cannot walk on it). Calm (no speckles, no glare) but moving: dark navy-indigo, slow ripples
+  // drifting across it, a soft moon path that shimmers, soft reflections of the pavilion and lanterns, fog at the horizon
+  const lakeMat = calmWaterMat({ deep: '#080d30', shallow: '#18245e', sky: '#3a4894', light: MOON, lightCol: '#dfe6ff', path: 1.15, lightsCol: '#ffc98a', centre: [0, 0], radius: 120, motion: 1 });
+  add(new THREE.CircleGeometry(170, 48).rotateX(-Math.PI / 2), lakeMat, V(0, -0.55, 0));
   const isle = (x, y, z, r) => K.island(x, y, z, r, { top: GRASS, cliff: '#efe4c8', keel: '#8f88c8', rim: false, tips: false });
   isle(0, 0, 21, 11);                                    // arrival shore
   isle(0, 0, -8, 11);                                    // pavilion island
   isle(20, 1.2, -20, 7.5);                               // reading terrace (higher)
   isle(-17, 0, -14, 5);                                  // willow islet
+  // gentle lapping where the shores meet the lake
+  for (const [cx, cz, r, n] of [[0, 21, 11, 5], [0, -8, 11, 4], [20, -20, 7.5, 2], [-17, -14, 5, 2]]) for (let i = 0; i < n; i++) { const a = i / n * 6.283 + 0.4; K.sound('shore', V(cx + Math.cos(a) * (r + 0.6), -0.4, cz + Math.sin(a) * (r + 0.6)), 13, 0.8); }
 
   // ----- bridges -----
   const LIL = ['#efe9ff', '#d9ccff', '#e6dcff'];
@@ -60,6 +65,9 @@ export function build() {
     const m = new THREE.Mesh(G.box, flat([WARM, '#ffc2d2', '#ffe9b0'][n % 3])); m.position.set(x, -0.3, z); m.scale.set(0.42, 0.5, 0.42); lanterns.add(m); m.userData.ph = R() * 6;
     if (n <= 10) { const g = glow('#ffcf90', 3, 0.5); g.position.set(x, -0.1, z); lanterns.add(g); } }
   animated.push((dt, t) => { lanterns.position.y = Math.sin(t * 1.2) * 0.05; lanterns.position.x = Math.sin(t * 0.1) * 0.6; });
+  { const L = lakeMat.uniforms.uLights.value; L[0].set(PX, 3.2, PZ, 1.3);                              // the pavilion's glowing ring
+    lanterns.children.filter((m) => m.isMesh).slice(0, 5).forEach((m, i) => L[i + 1].set(m.position.x, 0.2, m.position.z, 0.9));
+    lakeMat.uniforms.uN.value = 6; }
   for (let i = 0, n = 0; n < 40 && i < 600; i++) { const x = (R() - 0.5) * 80, z = (R() - 0.5) * 80; if (!onWater(x, z)) continue; n++;
     batch.add('lily', G.disc, toon('#ffffff'), V(x, -0.5 + (n % 9) * 0.004, z), { scale: [0.7 + R() * 0.5, 0.6, 0.7 + R() * 0.5], rotY: R() * 6, color: n % 2 ? '#7fd0a8' : '#6cc49a' });
     if (n % 3 === 0) batch.add('lilyFlower', G.petal, toon('#ffffff'), V(x, -0.36, z), { scale: [1.3, 0.8, 1.3], color: n % 2 ? '#ffc2e4' : '#ffffff' }); }

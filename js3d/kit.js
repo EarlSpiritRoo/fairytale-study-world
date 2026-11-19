@@ -26,6 +26,7 @@
 import * as THREE from 'three';
 import { toon, outline, holo, glow, flat, blobTexture, Batch, rng, THEME, uTime } from './toon.js';
 import { makeAvatar, makePet } from './character.js';
+import { waterfallMat, mistPoints } from './surfaces.js';
 
 export const V = (x, y, z) => new THREE.Vector3(x, y, z);
 export function lerpAngle(a, b, t) { const d = ((b - a + Math.PI) % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2) - Math.PI; return a + d * Math.min(1, t); }
@@ -69,7 +70,8 @@ export function makeKit(id, seed) {
   const R = rng(seed), batch = new Batch(), group = new THREE.Group(); group.name = id;
   const solids = [], colliders = [], occluders = [], interactables = [], npcs = [], animated = [], drifters = [], portals = [], lowHide = [];
   const colGroup = new THREE.Group(); colGroup.visible = false; group.add(colGroup);
-  let circle = null, pathN = 0;
+  let circle = null, pathN = 0; const circles = [], sounds = [];
+  const fallV = [], fallUV = [], fallLen = [], fallIdx = [], mistP = [], mistS = [];
 
   // ---------- basics ----------
   // o = { r: [x,y,z] rotation, s: [x,y,z] scale, ink: outline }
@@ -96,7 +98,8 @@ export function makeKit(id, seed) {
     add(new THREE.CylinderGeometry(r * 0.9, r * 0.62, r * 0.32, 12), toon(o.cliff || THEME.cliff), V(cx, cy - 1.1 - r * 0.16, cz));
     add(new THREE.ConeGeometry(r * 0.62, r * 0.75, 9).rotateX(Math.PI), toon(o.keel || THEME.keel), V(cx, cy - 1.1 - r * 0.32 - r * 0.375, cz));
     if (o.tips !== false) for (let i = 0; i < 5; i++) { const a = R() * 6.28, d = R() * r * 0.45; batch.add('keelTip', G.keelTip, holo(), V(cx + Math.cos(a) * d, cy - 1.4 - r * 0.5 - R() * r * 0.2, cz + Math.sin(a) * d), { scale: 0.7 + R() * r * 0.06 }); }
-    if (o.rim !== false) { const n = Math.round(r * 1.5); for (let i = 0; i < n; i++) { const a = i / n * 6.283 + R() * 0.2, s = 1.5 + R() * 1.4; batch.add('puff' + (o.rim || ''), G.puff, toon(o.rim || THEME.cloud), V(cx + Math.cos(a) * (r + 0.4), cy - 0.9 - R() * 0.5, cz + Math.sin(a) * (r + 0.4)), { scale: [s, s * 0.72, s], rotY: R() * 6 }); } }
+    // o.gaps = [[angle, halfWidth], …]: leave the cloud rim open there (where a waterfall pours off the edge)
+    if (o.rim !== false) { const n = Math.round(r * 1.5); for (let i = 0; i < n; i++) { const a = i / n * 6.283 + R() * 0.2, s = 1.5 + R() * 1.4; if (o.gaps && o.gaps.some(([g, w]) => Math.abs(lerpAngle(0, a - g, 1)) < w)) continue; batch.add('puff' + (o.rim || ''), G.puff, toon(o.rim || THEME.cloud), V(cx + Math.cos(a) * (r + 0.4), cy - 0.9 - R() * 0.5, cz + Math.sin(a) * (r + 0.4)), { scale: [s, s * 0.72, s], rotY: R() * 6 }); } }
     if (o.sheen !== false) sheen(cx, cy, cz, r * 0.9, r * 1.2);
     return { cx, cy, cz, r };
   }
@@ -117,7 +120,8 @@ export function makeKit(id, seed) {
   function stairs(x, y, z, yaw, n, o = {}) {
     const w = o.w || 3.4, rise = o.rise || 0.3, run = o.run || 0.7, cols = o.cols || ['#ffe3f4', '#fff4fb'], dx = Math.sin(yaw), dz = Math.cos(yaw);
     for (let i = 0; i < n; i++) { const h = rise * (i + 1), d = i * run + run / 2; solid(add(new THREE.BoxGeometry(w - (i % 2) * 0.03, h, run + 0.04), toon(cols[i % 2]), V(x + dx * d, y + h / 2, z + dz * d), { r: [0, yaw, 0] })); }
-    if (o.landing) { const d = n * run + o.landing / 2 - 0.1; solid(add(new THREE.BoxGeometry(w - 0.06, rise * n, o.landing), toon(cols[1]), V(x + dx * d, y + rise * n / 2, z + dz * d), { r: [0, yaw, 0] })); }
+    // the landing's top sits 1.5 cm under the last step and the floor it joins: equal heights where they overlap made them flicker (z-fighting)
+    if (o.landing) { const d = n * run + o.landing / 2 - 0.1, lh = rise * n - 0.015; solid(add(new THREE.BoxGeometry(w - 0.06, lh, o.landing), toon(cols[1]), V(x + dx * d, y + lh / 2, z + dz * d), { r: [0, yaw, 0] })); }
     const L = n * run + (o.landing || 0);
     for (const s of [-1, 1]) wall(x + dz * s * (w / 2 + 0.15), z - dx * s * (w / 2 + 0.15), x + dz * s * (w / 2 + 0.15) + dx * L, z - dx * s * (w / 2 + 0.15) + dz * L, 0.12, y, y + rise * n + 1.6);
     return rise * n;
@@ -221,7 +225,34 @@ export function makeKit(id, seed) {
     }
     return out;
   }
-  const setCircle = (c) => { circle = Object.assign({ id }, c); };              // { name, x, z, y, r, seats, label: Vector3 }
+  // { name, x, z, y, r, seats, label: Vector3, key }. The first circle's id is the realm id (so existing timers and
+  // today's minutes carry over); any extra circle in the same realm is 'realm.key' (e.g. 'skyfield.library').
+  const setCircle = (c) => { circles.push(Object.assign({ id, cid: circles.length ? id + '.' + c.key : id }, c)); circle = circles[0]; };
+  // a positional ambient sound source for audio.js: kind = 'waterfall' | 'fire' | 'shore' | 'chimes' | 'wings' …, r = audible radius
+  const sound = (kind, pos, r = 20, gain = 1) => sounds.push({ kind, pos, r, gain });
+
+  // ---------- waterfalls: every ribbon in the realm goes into ONE mesh (one draw call) ----------
+  // top = lip position, dir = [dx, dz] outward, width, drop (metres), o = { out: how far it arcs out, mist: true }
+  function waterfall(top, dir, width, drop, o = {}) {
+    const L = Math.hypot(dir[0], dir[1]) || 1, dx = dir[0] / L, dz = dir[1] / L, ax = -dz, az = dx, N = Math.max(6, Math.min(18, Math.round(drop / 2)));
+    for (const [layer, off, wk] of [[0, 0, 1], [1, 0.3, 0.7]]) {                    // two layers: a full sheet and a thinner one just in front
+      const base = fallV.length / 3, out = (o.out == null ? Math.min(2.2, 0.6 + drop * 0.06) : o.out) + off;
+      for (let i = 0; i <= N; i++) {
+        const u = i / N, h = out * Math.sqrt(u) + (layer ? 0.05 : 0), y = top.y - drop * u, w = width * wk * (1 + u * 0.45) / 2;
+        const cx = top.x + dx * h, cz = top.z + dz * h;
+        fallV.push(cx - ax * w, y, cz - az * w, cx + ax * w, y, cz + az * w); fallUV.push(0, u, 1, u); fallLen.push(drop, drop);
+        if (i < N) { const a = base + i * 2; fallIdx.push(a, a + 1, a + 2, a + 1, a + 3, a + 2); }
+      }
+    }
+    if (o.mist !== false) {                                                           // spray at the lip, mist where it lands
+      const bx = top.x + dx * (o.out || 1.5), bz = top.z + dz * (o.out || 1.5), big = Math.min(26, 6 + width * 2.5 + drop * 0.25);
+      mistP.push(top.x + dx * 0.6, top.y - 0.3, top.z + dz * 0.6); mistS.push(Math.max(2.4, width * 0.9));
+      for (let k = 0; k < (drop > 10 ? 4 : 2); k++) { mistP.push(bx + (R() - 0.5) * width * 1.4, top.y - drop * (0.92 + R() * 0.1), bz + (R() - 0.5) * width); mistS.push(big * (0.7 + R() * 0.5)); }
+      if (drop > 10) { mistP.push(bx, top.y - drop * 0.55, bz); mistS.push(big * 0.6); }
+    }
+    sound('waterfall', V(top.x, top.y - Math.min(drop, 6) * 0.5, top.z), Math.min(45, 14 + width * 3 + drop * 0.4), Math.min(1, 0.4 + width * 0.12));
+  }
+  const mist = (x, y, z, size) => { mistP.push(x, y, z); mistS.push(size); };
 
   // ---------- portals: one glowing gate per other realm, in a row facing `yaw` ----------
   function gates(cx, y, cz, yaw, spread = 4.4) {
@@ -278,6 +309,12 @@ export function makeKit(id, seed) {
   // ============================================================
   function finish(o) {
     const instanced = batch.build(group);
+    if (fallIdx.length) {
+      const g = new THREE.BufferGeometry();
+      g.setAttribute('position', new THREE.Float32BufferAttribute(fallV, 3)); g.setAttribute('aUV', new THREE.Float32BufferAttribute(fallUV, 2)); g.setAttribute('aLen', new THREE.Float32BufferAttribute(fallLen, 1)); g.setIndex(fallIdx);
+      g.computeBoundingSphere(); const m = new THREE.Mesh(g, waterfallMat()); m.renderOrder = 2; group.add(m);
+    }
+    if (mistS.length) { const mp = mistPoints(new Float32Array(mistP), new Float32Array(mistS), '#ffffff', blobTexture()); mp.renderOrder = 3; group.add(mp); lowHide.push('__mist'); mp.name = '__mist'; instanced.__mist = mp; }
     const ray = new THREE.Raycaster(), DOWN = V(0, -1, 0), origin = V(0, 0, 0), hits = [], tmp = V(0, 0, 0);
     function ground(x, y, z) {
       origin.set(x, y + 40, z); ray.set(origin, DOWN); ray.far = 60; hits.length = 0;
@@ -293,7 +330,7 @@ export function makeKit(id, seed) {
     let low = false;
     // ctx = { playerPos, trail(pos) }
     function update(dt, t, ctx) {
-      for (const f of animated) f(dt, t);
+      for (const f of animated) f(dt, t, ctx, low);
       if (!low) for (const b of drifters) {
         if (b.pos.distanceTo(b.target) < 0.3) b.target.set(b.home.x + (Math.random() - 0.5) * b.range, b.home.y + (Math.random() - 0.5) * 1.2, b.home.z + (Math.random() - 0.5) * b.range);
         tmp.subVectors(b.target, b.pos).normalize(); b.pos.addScaledVector(tmp, dt * b.speed); b.pos.y += Math.sin(t * (b.kind === 'jelly' ? 1.4 : 6) + b.ph) * dt * (b.kind === 'jelly' ? 0.25 : 0.5);
@@ -320,9 +357,9 @@ export function makeKit(id, seed) {
       for (const k in instanced) if (/^(sheen|tuft|pollen)/.test(k) || lowHide.includes(k)) instanced[k].visible = !v;
     }
     for (const it of interactables) it.zone = id;
-    return Object.assign({ id, name: ZONES[id].name, group, solids, ground, colliders, occluders, circle, interactables, npcs, portals, update, setLow, spawnYaw: Math.PI }, o);
+    return Object.assign({ id, name: ZONES[id].name, group, solids, ground, colliders, occluders, circle, circles, sounds, interactables, npcs, portals, update, setLow, spawnYaw: Math.PI }, o);
   }
 
-  return { id, R, G, group, batch, animated, keepOut, free, inDisc, add, solid, occlude, wall, post, shadow, boundary, floor, island, sheen, mesa, slab, stairs, ramp, bridge,
+  return { id, R, G, group, batch, animated, keepOut, free, inDisc, add, solid, occlude, wall, post, shadow, boundary, floor, island, sheen, mesa, slab, stairs, ramp, bridge, waterfall, mist, sound, circles,
     tree, pine, crystal, lamp, path, flowers, clump, rock, rays, seats, setCircle, gates, npc, person, animal, thing, drift, finish, lowHide };
 }

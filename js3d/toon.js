@@ -6,6 +6,7 @@
    toon(color)        cel-shaded material (cached per colour)
    outline(mesh)      soft ink outline (inverted hull)
    holo()             iridescent material: crystals, wings, domes
+   opal()             opal glass that shifts pink / aqua / gold with the view (the Opal Spire)
    glow(color, size)  additive glow sprite (cheap "bloom")
    Batch              collects repeated props → InstancedMesh
    THEME              palette shared with the CSS
@@ -64,6 +65,7 @@ export function outline(mesh) {
 
 // ---------- iridescent "holo" material (works with instancing and fog) ----------
 export const uTime = { value: 0 };                    // shared clock for every animated shader
+export const uPointScale = { value: 300 };            // pixels per metre at 1 m for Points (set from the viewport size)
 const holoCache = {};
 export function holo(alpha = 1, doubleSide = false) {
   const key = alpha + '|' + doubleSide;
@@ -100,6 +102,56 @@ export function holo(alpha = 1, doubleSide = false) {
         c = mix(c, vec3(1.0), pow(f, 3.0) * 0.7);                          // pearly rim
         c *= 0.86 + 0.14 * step(0.0, dot(n, normalize(vec3(0.4, 0.8, 0.3))));  // one hard toon shadow step
         gl_FragColor = vec4(c, uAlpha);
+        #include <fog_fragment>
+        #include <colorspace_fragment>
+      }`,
+  }));
+}
+
+// ---------- opal glass: the Opal Spire. Pink / aqua / gold that shifts with the viewing angle ----------
+// Not lit by the scene lights (like holo), so it stays luminous at golden hour. `glowAmt` adds a soft inner light.
+const opalCache = {};
+export function opal(tint = '#fff4fb', glowAmt = 0) {
+  const key = tint + '|' + glowAmt;
+  if (opalCache[key]) return opalCache[key];
+  return (opalCache[key] = new THREE.ShaderMaterial({
+    fog: true,
+    uniforms: Object.assign(THREE.UniformsUtils.merge([THREE.UniformsLib.fog, { uTint: { value: new THREE.Color(tint) }, uGlow: { value: glowAmt } }]), { uTime }),
+    vertexShader: `
+      varying vec3 vN; varying vec3 vV; varying vec3 vW;
+      #include <common>
+      #include <fog_pars_vertex>
+      void main() {
+        #ifdef USE_INSTANCING
+          mat4 m = modelMatrix * instanceMatrix;
+        #else
+          mat4 m = modelMatrix;
+        #endif
+        vec4 wp = m * vec4(position, 1.0);
+        vW = wp.xyz; vN = normalize(mat3(m) * normal); vV = normalize(cameraPosition - wp.xyz);
+        vec4 mvPosition = viewMatrix * wp; gl_Position = projectionMatrix * mvPosition;
+        #include <fog_vertex>
+      }`,
+    fragmentShader: `
+      uniform float uTime; uniform vec3 uTint; uniform float uGlow;
+      varying vec3 vN; varying vec3 vV; varying vec3 vW;
+      #include <common>
+      #include <fog_pars_fragment>
+      vec3 opalPal(float t) {                                   // pink -> aqua -> gold -> pink
+        vec3 a = vec3(1.0, 0.72, 0.87), b = vec3(0.62, 0.95, 0.95), c = vec3(1.0, 0.88, 0.6);
+        t = fract(t) * 3.0;
+        return t < 1.0 ? mix(a, b, t) : t < 2.0 ? mix(b, c, t - 1.0) : mix(c, a, t - 2.0);
+      }
+      void main() {
+        vec3 n = normalize(vN); if (!gl_FrontFacing) n = -n;
+        vec3 v = normalize(vV);
+        float f = 1.0 - max(dot(n, v), 0.0);                    // fresnel: the colour slides as you walk around it
+        vec3 c = pow(opalPal(f * 1.1 + dot(n, vec3(0.3, 0.5, 0.2)) * 0.45 + vW.y * 0.03 + vW.x * 0.012 + uTime * 0.02), vec3(2.2));   // to linear: keeps the pastels from washing out
+        c = mix(uTint, c, 0.72 + 0.22 * f);
+        c = mix(c, vec3(1.0, 0.97, 0.93), pow(f, 4.0) * 0.5);   // pearly rim
+        c *= 0.8 + 0.2 * step(0.0, dot(n, normalize(vec3(0.5, 0.7, -0.4))));
+        c += uGlow * vec3(1.0, 0.85, 0.65) * (0.35 + 0.25 * sin(uTime * 0.8 + vW.y * 0.3));
+        gl_FragColor = vec4(c, 1.0);
         #include <fog_fragment>
         #include <colorspace_fragment>
       }`,

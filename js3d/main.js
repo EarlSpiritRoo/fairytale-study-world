@@ -62,7 +62,7 @@ const hideTags = (tags) => { for (const t of tags) { t.shown = false; t.el.style
 function showZone(id) {
   if (zone) { zone.group.visible = false; hideTags(zone.npcTags); hideTags(zone.portalTags); for (const [it, t] of thingTags) if (it.zone === zone.id) hideTags([t]); }
   zone = getZone(id); zone.group.visible = true; env.apply(zone); rig.occluders = zone.occluders;
-  $('zoneName').textContent = zone.name; document.documentElement.style.setProperty('--zone', ZONES[id].ui); document.body.dataset.zone = id;
+  $('zoneName').textContent = zone.name; document.title = 'Fablenook · ' + zone.name; Audio.setZone(zone.id, zone.sounds || []); document.documentElement.style.setProperty('--zone', ZONES[id].ui); document.body.dataset.zone = id;
   for (const k in others) showActor(others[k]);
 }
 const applyOutlines = () => { for (const o of outlines) o.visible = !lowQ; };
@@ -111,11 +111,33 @@ function dress(a, look) {
 function showActor(o) { const here = o.zone === zone.id; o.av.group.visible = o.pet.group.visible = here; if (!here) hideTags([o.tag]); }
 function removeActor(a) { scene.remove(a.av.group); scene.remove(a.pet.group); a.tag.el.remove(); }
 // place the models; the pet trots to a spot just behind its owner
-function poseActor(a, dt) {
-  a.vy += (a.pos.y - a.vy) * Math.min(1, dt * 14);                 // smooth out stairs
+// Visual height. The ground is made of steps, so the logical height jumps a whole step (0.3 m) at each edge;
+// drawing that directly, or easing it quickly, pops the avatar and the camera up on every step.
+// Instead the drawn height follows the AVERAGE ground over a 0.7 m window centred on the player (one tread
+// deep), which turns any staircase into a smooth ramp in both directions, then two gentle smoothing stages.
+// It never sinks more than 8 cm into the ground you are standing on (so ledges don't swallow your feet).
+const HWIN = 0.7, HSAMPLES = 13;
+function smoothHeight(a, dt, probe) {
+  const mx = a.pos.x - (a.px ?? a.pos.x), mz = a.pos.z - (a.pz ?? a.pos.z), md = Math.hypot(mx, mz); a.px = a.pos.x; a.pz = a.pos.z;
+  if (md > 1e-4) { a.hdx = mx / md; a.hdz = mz / md; }
+  let target = a.pos.y;
+  if (probe && md / Math.max(dt, 1e-3) > 0.3 && a.hdx !== undefined) {               // only the local player, only while walking
+    let sum = 0;
+    for (let i = 0; i < HSAMPLES; i++) {
+      const o = (i / (HSAMPLES - 1) - 0.5) * HWIN, g = zone.ground(a.pos.x + a.hdx * o, a.pos.y, a.pos.z + a.hdz * o);
+      sum += g !== null && Math.abs(g - a.pos.y) < 0.7 ? g : a.pos.y;
+    }
+    target = Math.max(sum / HSAMPLES, a.pos.y - 0.08);
+  }
+  if (a.vy1 === undefined || Math.abs(target - a.vy) > 1.6) { a.vy1 = a.vy = target; return; }   // first frame, teleports, realm changes
+  const k = Math.min(1, dt * 20);
+  a.vy1 += (target - a.vy1) * k; a.vy += (a.vy1 - a.vy) * k;
+}
+function poseActor(a, dt, probe = false) {
+  smoothHeight(a, dt, probe);
   // sitting on a Study Circle seat: lift the whole avatar so it rests ON the cushion / stool, not in it
-  let lift = 0; const C = zone.circle;
-  if (a.anim === ANIM.sit && Math.abs(a.pos.y - C.y) < 1) for (const s of C.seats) if (Math.hypot(a.pos.x - s.x, a.pos.z - s.z) < 0.75) lift = s.top - a.pos.y - SIT_BASE;
+  let lift = 0;
+  if (a.anim === ANIM.sit) for (const C of zone.circles) if (Math.abs(a.pos.y - C.y) < 1) for (const s of C.seats) if (Math.hypot(a.pos.x - s.x, a.pos.z - s.z) < 0.75) lift = s.top - a.pos.y - SIT_BASE;
   a.lift += (lift - a.lift) * Math.min(1, dt * 9);
   a.av.group.position.set(a.pos.x, a.vy + a.lift, a.pos.z); a.av.group.rotation.y = a.rot;
   a.av.update(dt, { move: a.anim === ANIM.walk ? 1 : a.anim === ANIM.run ? 2 : 0, sit: a.anim === ANIM.sit, act: ACT[a.anim] || null });
@@ -179,14 +201,14 @@ function buildJoin() {
 $('rollName').onclick = () => { $('nameInput').value = randomName(); };
 $('rollAll').onclick = () => { Object.assign(me, randomLook()); me.name = randomName(); buildJoin(); };
 $('start').onclick = () => {
-  Audio.unlock(); Audio.sfx('start'); if (Audio.wantsMusic()) setMusic(true);
+  Audio.unlock(); Audio.sfx('start');
   $('title').hidden = true; $('join').hidden = false; startPreview();
 };
 $('enter').onclick = () => {
   me.name = $('nameInput').value.trim().slice(0, 28) || randomName();
   saveProfile(); Audio.unlock(); Audio.sfx('portal');
   if (preview) { preview.pr.dispose(); preview = null; }
-  actor = makeActor(me); actor.pos.copy(zone.spawn); actor.vy = actor.pos.y; actor.rot = zone.spawnYaw; actor.petPos.copy(actor.pos);
+  actor = makeActor(me); actor.pos.copy(zone.spawn); actor.vy = actor.vy1 = actor.pos.y; actor.rot = zone.spawnYaw; actor.petPos.copy(actor.pos);
   actor.idle = 0; actor.seat = null; actor.trail = 0; actor.act = null; actor.forceSit = false; actor.noSit = false;
   rig.yaw = 0; rig.pitch = 0.3; rig.dist = rig.cur = 6.5; rig.first = true;
   joined = true; onTitle = false; input.enabled = true;
@@ -195,12 +217,24 @@ $('enter').onclick = () => {
   env.burst(actor.pos.clone().setY(1), 20);
   Net.connect(me.key); pushPresence(); uiTick(); maybeHint();
 };
-function setMusic(on) { Audio.setMusic(on); $('musicBtn').setAttribute('aria-pressed', on ? 'true' : 'false'); $('musicState').textContent = on ? 'on' : 'off'; }
-$('musicBtn').onclick = () => { Audio.unlock(); setMusic(!Audio.musicOn); };
+// ----- sound settings (⚙️ menu): Ambience on / off, two volume sliders, an optional calm pad -----
+function showAudio() {
+  for (const [btn, st, on] of [['ambBtn', 'ambState', Audio.ambienceOn], ['padBtn', 'padState', Audio.padOn]]) { $(btn).setAttribute('aria-pressed', on ? 'true' : 'false'); $(st).textContent = on ? 'on' : 'off'; }
+  $('volAmb').value = Math.round(Audio.vol.ambience * 100); $('volFx').value = Math.round(Audio.vol.effects * 100);
+}
+$('ambBtn').onclick = () => { Audio.unlock(); Audio.setAmbience(!Audio.ambienceOn); showAudio(); };
+$('padBtn').onclick = () => { Audio.unlock(); Audio.setPad(!Audio.padOn); showAudio(); };
+$('volAmb').oninput = (e) => { Audio.unlock(); Audio.setVolume('ambience', e.target.value / 100); };
+$('volFx').oninput = (e) => { Audio.unlock(); Audio.setVolume('effects', e.target.value / 100); Audio.sfx('click'); };
+showAudio();
+// ----- camera: Q / E quick 45-degree turns; the on-screen camera pad orbits (see controls.js) -----
+input.onTurn = (d) => { if (joined) rig.turn(d); };
 document.addEventListener('click', (e) => { if (e.target.closest('button') && !e.target.closest('#pickKind,#pickScheme,#pickSkin,#pickPet,#start,#enter')) Audio.sfx('click'); });
 
 // ============================================================ 4. UPDATE (my character)
-const inCircle = (p) => { const C = zone.circle; return Math.hypot(p.x - C.x, p.z - C.z) < C.r && Math.abs(p.y - C.y) < 1; };
+// a realm can have several Study Circles (Skyfield: the Sky Gazebo and the Starlight Library)
+const circleAt = (p) => zone.circles.find((C) => Math.hypot(p.x - C.x, p.z - C.z) < C.r && Math.abs(p.y - C.y) < 1) || null;
+const inCircle = (p) => !!circleAt(p);
 
 // ----- travel between realms -----
 function travel(to) {
@@ -209,7 +243,7 @@ function travel(to) {
   Audio.sfx('portal'); click = null; nearby = null; $('prompt').hidden = true; closePopups();
   Study.myCircle = null;
   showZone(to);
-  const a = actor; a.pos.copy(zone.spawn); a.vy = a.pos.y; a.rot = zone.spawnYaw; a.petPos.copy(a.pos); a.idle = 0; a.seat = null;
+  const a = actor; a.pos.copy(zone.spawn); a.vy = a.vy1 = a.pos.y; a.rot = zone.spawnYaw; a.petPos.copy(a.pos); a.idle = 0; a.seat = null;
   rig.yaw = zone.spawnYaw + Math.PI; rig.pitch = 0.3; rig.cur = rig.dist; rig.first = true;
   for (let i = 0; i < 3; i++) env.burst(a.pos.clone().setY(a.pos.y + 0.5 + i * 0.5), 14);
   pushPresence(); sendPosition(true); uiTick();
@@ -262,7 +296,7 @@ input.onAction = doAction;
 
 function freeSeat(p) {                                  // nearest cushion nobody else is sitting on
   let best = null, bd = 1e9;
-  for (const s of zone.circle.seats) {
+  for (const s of (circleAt(p) || zone.circle).seats) {
     let taken = false; for (const k in others) if (others[k].zone === zone.id && others[k].anim === ANIM.sit && Math.hypot(others[k].pos.x - s.x, others[k].pos.z - s.z) < 0.6) taken = true;
     const d = Math.hypot(p.x - s.x, p.z - s.z); if (!taken && d < bd) { bd = d; best = s; }
   }
@@ -310,7 +344,7 @@ function updateMe(dt) {
 
   // Study Circle: step into the gazebo to join the shared timer; stand still and you take a seat
   for (const p of zone.portals) if (Math.hypot(p.pos.x - a.pos.x, p.pos.z - a.pos.z) < p.r && Math.abs(p.pos.y - a.pos.y) < 1.5) { travel(p.to); return null; }   // walked into a gate
-  const C = zone.circle, inside = inCircle(a.pos), mine = inside && !Study.solo ? zone.id : null;
+  const C = circleAt(a.pos), inside = !!C, mine = inside && !Study.solo ? C.cid : null;
   if (mine !== Study.myCircle) { Study.myCircle = mine; pushPresence(); uiTick(); }
   if (a.act && performance.now() > a.act.until) a.act = null;                     // one-shot actions end by themselves
   if (go) { /* walking */ }
@@ -321,12 +355,12 @@ function updateMe(dt) {
     anim = ANIM.sit;
   }
   a.anim = anim;
-  poseActor(a, dt);
+  poseActor(a, dt, true);
 
   // what can I interact with?
   let best = null, bd = 1e9;
   for (const it of zone.interactables) { const d = Math.hypot(it.pos.x - a.pos.x, it.pos.z - a.pos.z); if (d < it.r && Math.abs(it.pos.y - a.pos.y) < 2 && d < bd) { bd = d; best = it; } }
-  if (best !== nearby) { nearby = best; $('prompt').hidden = !best; if (best) $('prompt').textContent = (matchMedia('(pointer: coarse)').matches ? 'Tap · ' : 'Press E · ') + best.label; }
+  if (best !== nearby) { nearby = best; $('prompt').hidden = !best; if (best) $('prompt').textContent = (matchMedia('(pointer: coarse)').matches ? 'Tap · ' : 'Press F · ') + best.label; }
   return heading;
 }
 function interact() {
@@ -371,7 +405,7 @@ function cleanMeta(m) {
     mx: num(m.x, -90, 90, 0), my: num(m.y, -20, 40, 0), mz: num(m.zz, -90, 90, 17), mr: num(m.r, -10, 10, 0), ma: num(m.a, 0, 7, 0) | 0,
     tm: num(m.tm, 0, 9999999, 0) | 0,
     so: m.so && isFinite(m.so.e) ? { sub: String(m.so.sub || '').slice(0, 24), e: +m.so.e } : null,
-    ci: ZONES[m.ci] ? m.ci : null,
+    ci: FN.CIRCLES[m.ci] ? m.ci : null,
   };
 }
 Net.on('presence', (state) => {
@@ -382,10 +416,10 @@ Net.on('presence', (state) => {
     let o = others[key];
     if (!o) {
       newcomer = true; o = others[key] = makeActor(m);
-      o.pos.set(m.mx, m.my, m.mz); o.vy = m.my; o.rot = m.mr; o.anim = m.ma; o.petPos.copy(o.pos);
+      o.pos.set(m.mx, m.my, m.mz); o.vy = o.vy1 = m.my; o.rot = m.mr; o.anim = m.ma; o.petPos.copy(o.pos);
       o.tpos = o.pos.clone(); o.trot = m.mr; o.zone = m.zone;
     }
-    if (o.zone !== m.zone) { o.zone = m.zone; o.pos.set(m.mx, m.my, m.mz); o.tpos.copy(o.pos); o.vy = m.my; o.petPos.copy(o.pos); }   // they changed realm: snap
+    if (o.zone !== m.zone) { o.zone = m.zone; o.pos.set(m.mx, m.my, m.mz); o.tpos.copy(o.pos); o.vy = o.vy1 = m.my; o.petPos.copy(o.pos); }   // they changed realm: snap
     dress(o, m); Object.assign(o, { name: m.name, tm: m.tm, so: m.so, ci: m.ci }); showActor(o);
     if (raw.cs && typeof raw.cs === 'object') for (const z in raw.cs) Study.mergeCircle(z, raw.cs[z]);
   }
@@ -395,7 +429,7 @@ Net.on('presence', (state) => {
 });
 Net.on('msg:p', (p) => {
   const o = others[p.i]; if (!o || !ZONES[p.n]) return;
-  if (o.zone !== p.n) { o.zone = p.n; o.pos.set(num(p.x, -90, 90, 0), num(p.y, -20, 40, 0), num(p.z, -90, 90, 0)); o.vy = o.pos.y; o.petPos.copy(o.pos); showActor(o); }
+  if (o.zone !== p.n) { o.zone = p.n; o.pos.set(num(p.x, -90, 90, 0), num(p.y, -20, 40, 0), num(p.z, -90, 90, 0)); o.vy = o.vy1 = o.pos.y; o.petPos.copy(o.pos); showActor(o); }
   o.tpos.set(num(p.x, -90, 90, o.tpos.x), num(p.y, -20, 40, o.tpos.y), num(p.z, -90, 90, o.tpos.z));
   o.trot = num(p.r, -10, 10, o.trot); o.anim = num(p.a, 0, 7, 0) | 0;
 });
@@ -441,7 +475,8 @@ function studyText(solo, circleId, now) {
 }
 const circleCount = (z = zone.id) => { let n = Study.myCircle === z ? 1 : 0; for (const k in others) if (others[k].ci === z) n++; return n; };
 const thingTags = new Map();                             // speech bubbles for signposts, pools…
-const plaque = (() => { const el = document.createElement('div'); el.className = 'tag plaque jelly'; el.innerHTML = '<b></b><span></span><small></small>'; $('labels').appendChild(el); return { el, shown: true, sayUntil: 0, txt: '' }; })();
+const plaques = {};
+const plaqueFor = (cid) => plaques[cid] || (plaques[cid] = (() => { const el = document.createElement('div'); el.className = 'tag plaque jelly'; el.innerHTML = '<b></b><span></span><small></small>'; $('labels').appendChild(el); return { el, shown: true, sayUntil: 0, txt: '' }; })());
 function speak(it, text) {
   if (it.npc) return say(zone.npcTags[zone.npcs.indexOf(it.npc)], text);
   let t = thingTags.get(it); if (!t) { t = makeTag('npc'); t.nm.hidden = true; thingTags.set(it, t); }
@@ -461,14 +496,18 @@ function updateLabels(now) {
   zone.npcs.forEach((n, i) => placeTag(zone.npcTags[i], n.pos.x, n.pos.y + n.height + 0.25, n.pos.z, zone.npcTags[i].sayUntil ? 30 : 16));
   zone.portals.forEach((p, i) => placeTag(zone.portalTags[i], p.tag.x, p.tag.y, p.tag.z, 26));
   for (const [it, t] of thingTags) if (it.zone === zone.id) placeTag(t, it.tag.x, it.tag.y, it.tag.z, t.sayUntil ? 30 : 0);
-  // the gazebo's plaque (the panel replaces it once you are inside)
-  const C = zone.circle, ph = Study.phase(zone.id, now), txt = zone.id + Study.zoneTotal(zone.id) + '|' + circleCount() + '|' + ph.name + '|' + (ph.left ? FN.fmt(ph.left) : '');
-  if (plaque.txt !== txt) {
-    plaque.txt = txt; const [b, s, sm] = plaque.el.children;
-    b.textContent = C.name; s.textContent = '✨ ' + Study.zoneTotal(zone.id) + ' minutes focused here today';
-    sm.textContent = circleCount() + ' studying here now' + (ph.name === 'focus' ? '  ·  ⏳ ' + FN.fmt(ph.left) : ph.name === 'break' ? '  ·  ☕ ' + FN.fmt(ph.left) : '');
+  // each Study Circle's plaque (the panel replaces it once you are inside that circle)
+  const mineNow = circleAt(actor.pos);
+  for (const C of zone.circles) {
+    const plaque = plaqueFor(C.cid), ph = Study.phase(C.cid, now), n = circleCount(C.cid), txt = C.cid + Study.zoneTotal(C.cid) + '|' + n + '|' + ph.name + '|' + (ph.left ? FN.fmt(ph.left) : '');
+    if (plaque.txt !== txt) {
+      plaque.txt = txt; const [b, s, sm] = plaque.el.children;
+      b.textContent = C.name; s.textContent = '✨ ' + Study.zoneTotal(C.cid) + ' minutes focused here today';
+      sm.textContent = n + ' studying here now' + (ph.name === 'focus' ? '  ·  ⏳ ' + FN.fmt(ph.left) : ph.name === 'break' ? '  ·  ☕ ' + FN.fmt(ph.left) : '');
+    }
+    placeTag(plaque, C.label.x, C.label.y, C.label.z, mineNow === C ? 0 : C.labelDist || 70);   // indoor circles: only nearby (labels draw through walls)
   }
-  placeTag(plaque, C.label.x, C.label.y, C.label.z, inCircle(actor.pos) ? 0 : 70);
+  for (const cid in plaques) if (!zone.circles.some((C) => C.cid === cid)) hideTags([plaques[cid]]);
 }
 
 // ============================================================ 7. STUDY UI
@@ -647,8 +686,8 @@ function maybeHint() {
   let seen = false; try { seen = localStorage.getItem('fablenook.hinted') === '1'; } catch (e) { /* ignore */ }
   if (seen) return;
   $('hintText').textContent = coarse()
-    ? 'Press and hold the ground to walk toward your finger, or use the joystick under your left thumb. Drag with a second finger (or on empty sky) to look around.'
-    : 'Hold the left mouse button on the ground to walk toward the cursor (WASD works too). Right-drag to look around, scroll to zoom, E to interact, 1 to 6 for actions.';
+    ? 'Press and hold the ground to walk toward your finger, or use the joystick under your left thumb. Drag the camera pad on the right (or a second finger, or the sky) to look around.'
+    : 'Hold the left mouse button on the ground to walk toward the cursor (WASD works too). Drag the sky or right-drag to look around (or use the camera pad), scroll to zoom, Q / E to turn, F to interact, 1 to 6 for actions.';
   $('hintCard').hidden = false;
 }
 const hintDone = () => { $('hintCard').hidden = true; try { localStorage.setItem('fablenook.hinted', '1'); } catch (e) { /* ignore */ } };
@@ -664,7 +703,7 @@ function uiTick() {
   const oc = Net.isOnline() ? ' · <span class="hereTxt">' + counts[zone.id].here + ' here · </span>' + counts.all + ' online' : '';   // phones hide the "here" part
   if ($('onlineCount').innerHTML !== oc) $('onlineCount').innerHTML = oc;
   if (!$('mapPanel').hidden) drawMap(counts);
-  const solo = Study.solo, standing = inCircle(actor.pos);
+  const solo = Study.solo, here = circleAt(actor.pos), standing = !!here;
   $('studyBtn').hidden = !!solo || standing; $('soloPill').hidden = !solo;
   $('studyRow').hidden = $('studyBtn').hidden && $('soloPill').hidden;
   if (solo) $('soloText').textContent = '📖 ' + (solo.subject ? solo.subject + ' · ' : '') + FN.fmt(solo.endsAt - now);
@@ -672,9 +711,9 @@ function uiTick() {
   $('chatForm').hidden = focus; $('focusNote').hidden = !focus;
   $('circlePanel').hidden = !standing;
   if (standing) {
-    const ph = Study.phase(zone.id, now), blocked = !!solo;
-    $('circleTitle').textContent = zone.circle.name;
-    $('circleStat').textContent = '✨ ' + Study.zoneTotal(zone.id) + ' minutes focused here today · ' + circleCount() + ' here now';
+    const ph = Study.phase(here.cid, now), blocked = !!solo;
+    $('circleTitle').textContent = here.name;
+    $('circleStat').textContent = '✨ ' + Study.zoneTotal(here.cid) + ' minutes focused here today · ' + circleCount(here.cid) + ' here now';
     $('circleBlocked').hidden = !blocked; $('circleIdle').hidden = blocked || ph.name !== 'idle'; $('circleRunning').hidden = blocked || ph.name === 'idle';
     if (ph.name !== 'idle') {
       $('circleClock').textContent = (ph.name === 'focus' ? '' : '☕ ') + FN.fmt(ph.left);
@@ -714,7 +753,7 @@ $('mapClose').onclick = () => { $('mapPanel').hidden = true; };
 setInterval(() => { Study.tick(); uiTick(); }, 250);     // setInterval keeps the timers alive in background tabs
 
 // ============================================================ 8. LOOP
-const focusPt = new THREE.Vector3();
+const focusPt = new THREE.Vector3(), earDir = new THREE.Vector3();
 let last = performance.now(), gapMs = 16, slow = 0;
 function frame(nowMs) {
   requestAnimationFrame(frame);
@@ -726,7 +765,8 @@ function frame(nowMs) {
   zone.update(dt, t, { playerPos: joined ? actor.pos : null, trail: env.trail });
 
   // camera: follows me, or circles the island on the title / character screens
-  if (joined) { focusPt.set(actor.pos.x, actor.vy + actor.lift + (actor.anim === ANIM.sit ? 0.95 : 1.3), actor.pos.z); rig.update(dt, focusPt, heading, input, t); }
+  if (joined) { focusPt.set(actor.pos.x, actor.vy + actor.lift + (actor.anim === ANIM.sit ? 0.95 : 1.3), actor.pos.z); rig.update(dt, focusPt, heading, input, t);
+    Audio.listen(focusPt, camera.getWorldDirection(earDir)); }
   else { const a = t * 0.07; camera.position.set(Math.sin(a) * 34, 11 + Math.sin(t * 0.2) * 1.5, Math.cos(a) * 34 + 2); camera.lookAt(0, 3.5, -3); }
   // keep the character clear of the bottom HUD by shifting the picture up a little
   const wantShift = joined ? Math.min(hudBottom, vh * 0.42) * 0.42 : 0; viewShift += (wantShift - viewShift) * Math.min(1, dt * 5);
@@ -747,5 +787,5 @@ resize(); showZone(START_ZONE); setLow(lowQ); buildJoin();
 canvas.tabIndex = 0; window.focus(); canvas.focus({ preventScroll: true });       // grab keyboard focus on load
 window.addEventListener('pointerdown', (e) => { if (!/INPUT|TEXTAREA|BUTTON/.test(e.target.tagName)) window.focus(); });
 requestAnimationFrame(frame);
-FN._debug = { me, others, built, travel, input, redress: () => dress(actor, me), doAction, takeSnapshot, get click() { return click; }, get world() { return zone; }, get zone() { return zone; }, rig, camera, scene, renderer, get actor() { return actor; }, perf: () => ({ gap: +gapMs.toFixed(1), lowQ, calls: renderer.info.render.calls, tris: renderer.info.render.triangles }), setLow: (v) => { autoQ = false; setLow(v); },
+FN._debug = { me, others, built, travel, input, goto: (x, z) => { let y = null; for (let h = 6; h >= -1 && y === null; h -= 0.5) y = zone.ground(x, h, z); if (y === null) return false; click = { x, y, z, best: 1e9, since: 0, detour: 0, side: 1, tries: 0 }; return true; }, redress: () => dress(actor, me), doAction, takeSnapshot, get click() { return click; }, get world() { return zone; }, get zone() { return zone; }, rig, camera, scene, renderer, get actor() { return actor; }, perf: () => ({ gap: +gapMs.toFixed(1), lowQ, calls: renderer.info.render.calls, tris: renderer.info.render.triangles }), setLow: (v) => { autoQ = false; setLow(v); },
   walk: (dx, dz, steps) => { for (let i = 0; i < steps; i++) tryMove(actor.pos, dx, dz, zone); return [actor.pos.x, actor.pos.y, actor.pos.z].map((v) => +v.toFixed(2)); } };   // test helper: walk in a straight line

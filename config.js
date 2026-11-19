@@ -24,4 +24,14 @@ window.FABLE_CONFIG = {
      Until a key is pasted, the form falls back to opening the visitor's email app instead. */
   WEB3FORMS_KEY: "1e34691f-b013-4482-ab16-7fa11d7531d1",
   REPORT_EMAIL: "hello@yasmine.page",   // used for the mailto: fallback
+
+  /* Optional: real recordings instead of the synthesised ambience. Every sound is synthesised by
+     default, so leave this empty if you like. To use a CC0 recording, put the file in the audio/
+     folder and add a line here. Each one replaces just that sound; anything not listed stays
+     synthesised. Loops work best (a few seconds to a minute, seamless, mp3 or ogg).
+       realm beds:  skyfield, lagoon, hollyhollow, pavilion, petalwood
+       positional:  waterfall, fire, shore, bubbles, chimes, wings
+     Example:
+       AUDIO_FILES: { waterfall: "audio/waterfall.mp3", fire: "audio/fire.mp3" }, */
+  AUDIO_FILES: {},
 };

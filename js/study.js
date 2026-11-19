@@ -4,7 +4,8 @@
    SOLO SESSION     a private countdown; you earn 1 minute per
                     minute, even with the tab in the background.
 
-   STUDY CIRCLE     one shared timer per zone. A session is just
+   STUDY CIRCLE     one shared timer per circle (a realm's first circle
+                    uses the realm id, e.g. 'skyfield'; extras are 'skyfield.library'). A session is just
                     { s: startTime, len: minutes, by: starterId },
                     so every client derives the SAME countdown:
                       focus  = s .. s+len
@@ -59,7 +60,7 @@
 
   // Adopt a session we heard about. If two people start at once, the earlier start wins everywhere.
   S.mergeCircle = (zoneId, st) => {
-    if (!FN.ZONES[zoneId] || !valid(st)) return;
+    if (!FN.CIRCLES[zoneId] || !valid(st)) return;
     st = { s: +st.s, len: +st.len, by: String(st.by || '') };
     if (Date.now() >= st.s + st.len * 60000 + BREAK_MS) return;                 // already over
     const cur = S.circles[zoneId], curLive = cur && S.phase(zoneId).name !== 'idle';
@@ -101,7 +102,7 @@
   S.mergeLedger = (msg) => {
     if (!msg || msg.day !== S.ledger.day) return;
     const put = (z, u, m) => {
-      if (!FN.ZONES[z] || typeof u !== 'string' || u === S.me) return;
+      if (!FN.CIRCLES[z] || typeof u !== 'string' || u === S.me) return;
       m = FN.clamp(Math.floor(+m) || 0, 0, 1440);
       const row = S.ledger.z[z] = S.ledger.z[z] || {};
       if (m > (row[u] || 0)) row[u] = m;

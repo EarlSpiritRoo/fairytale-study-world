@@ -1,11 +1,12 @@
 /* ============================================================
    controls.js — input, the third-person camera, and movement.
 
-   Input      keyboard (WASD / arrows, Shift = walk, 1-6 actions);
+   Input      keyboard (WASD / arrows, Shift = walk, 1-6 actions, Q / E turn the camera, F / Enter interact);
               hold the left button / a finger on the ground to walk
               toward it, quick click / tap = walk to that spot;
               right-drag, trackpad two-finger drag, a second finger
               or a drag on empty sky = look; wheel / pinch anywhere = zoom;
+              the on-screen camera pad (a second joystick) orbits the camera;
               on touch a joystick appears under the left thumb.
    CameraRig  orbits the player, drifts back behind them while
               they walk, and pulls in when something is in the way.
@@ -22,7 +23,8 @@ export class Input {
     this.lookDX = 0; this.lookDY = 0; this.zoom = 0; this.lastLook = -99;
     this.joy = { id: null, x: 0, y: 0, ox: 0, oy: 0 }; this.touchMove = false;
     this.hold = { id: null, x: 0, y: 0 };                // press-and-hold on the ground: walk toward this screen point
-    this.onInteract = () => {}; this.onTap = () => {}; this.onAnyKey = () => {}; this.onAction = () => {};
+    this.onInteract = () => {}; this.onTap = () => {}; this.onAnyKey = () => {}; this.onAction = () => {}; this.onTurn = () => {};
+    this.padX = 0; this.padY = 0;                       // camera pad, each -1..1 (0 = released)
     this.hitTest = () => false;                          // main.js: is there walkable ground under this screen point?
     const look = new Map();                              // pointerId -> last position (camera drags)
     const downs = new Map();                             // pointerId -> where/when it went down (to tell a tap from a drag)
@@ -41,7 +43,9 @@ export class Input {
       const k = KEYMAP[e.key.toLowerCase()];
       if (k) { this.keys[k] = true; e.preventDefault(); }
       if (e.key === 'Shift') this.walk = true;
-      if (e.key.toLowerCase() === 'e' && !e.repeat) this.onInteract();
+      const lk = e.key.toLowerCase();
+      if ((lk === 'f' || e.key === 'Enter') && !e.repeat) this.onInteract();
+      if ((lk === 'q' || lk === 'e') && !e.repeat) this.onTurn(lk === 'q' ? -1 : 1);
       if (e.key >= '1' && e.key <= '6' && !e.repeat) this.onAction(+e.key - 1);
     });
     window.addEventListener('keyup', (e) => { const k = KEYMAP[e.key.toLowerCase()]; if (k) this.keys[k] = false; if (e.key === 'Shift') this.walk = false; });
@@ -109,14 +113,28 @@ export class Input {
       if (d && d.ok && e.type === 'pointerup' && e.timeStamp - d.t < 350 && Math.hypot(e.clientX - d.x, e.clientY - d.y) < 9) this.onTap(e.clientX, e.clientY);
     };
     canvas.addEventListener('pointerup', end); canvas.addEventListener('pointercancel', end);
-    // Wheel: a mouse wheel zooms. A trackpad's two-finger drag orbits the camera; its pinch (ctrlKey) zooms.
+    // Wheel: the scroll wheel always zooms, and so does a trackpad pinch (it arrives as a wheel event with ctrlKey).
     canvas.addEventListener('wheel', (e) => {
       if (!this.enabled) return; e.preventDefault();
-      const trackpad = e.deltaMode === 0 && (e.deltaX !== 0 || (e.wheelDeltaY !== undefined && e.wheelDeltaY % 120 !== 0));
-      if (e.ctrlKey) this.zoom += e.deltaY * 0.01;
-      else if (trackpad) { this.lookDX -= e.deltaX * 0.9; this.lookDY -= e.deltaY * 0.9; this.lastLook = performance.now() / 1000; }
-      else this.zoom += e.deltaY * 0.0012;
+      const px = e.deltaMode === 1 ? e.deltaY * 33 : e.deltaMode === 2 ? e.deltaY * 400 : e.deltaY;   // lines / pages -> pixels
+      this.zoom += THREE.MathUtils.clamp(px, -240, 240) * (e.ctrlKey ? 0.01 : 0.0012);
     }, { passive: false });
+
+    // The camera pad: drag its knob in any direction to orbit the camera; it springs back to the centre on release.
+    const pad = document.getElementById('camPad');
+    if (pad) {
+      const knob = pad.querySelector('.knob'); let pid = null;
+      const set = (e) => {
+        const r = pad.getBoundingClientRect(), R = r.width * 0.36;
+        let dx = e.clientX - (r.left + r.width / 2), dy = e.clientY - (r.top + r.height / 2); const d = Math.hypot(dx, dy);
+        if (d > R) { dx *= R / d; dy *= R / d; }
+        knob.style.transform = `translate(${dx}px, ${dy}px)`; this.padX = dx / R; this.padY = dy / R;
+      };
+      pad.addEventListener('pointerdown', (e) => { if (!this.enabled) return; e.preventDefault(); e.stopPropagation(); pid = e.pointerId; pad.setPointerCapture(pid); pad.classList.add('on'); set(e); });
+      pad.addEventListener('pointermove', (e) => { if (e.pointerId === pid) set(e); });
+      const off = (e) => { if (e.pointerId !== pid) return; pid = null; this.padX = this.padY = 0; knob.style.transform = ''; pad.classList.remove('on'); };
+      pad.addEventListener('pointerup', off); pad.addEventListener('pointercancel', off);
+    }
   }
   // desired movement in screen terms: x = right, z = forward, each -1..1
   move() {
@@ -127,31 +145,57 @@ export class Input {
   }
 }
 
+// Free orbit, like a video game camera. Every input (drag, camera pad, Q / E, zoom) moves a TARGET
+// yaw / pitch / distance, and the camera eases towards it, so all movement is smooth.
+// Pitch is clamped: the camera can't dip under the ground or flip over the top.
+const UP = new THREE.Vector3(0, 1, 0), PITCH_MIN = -0.1, PITCH_MAX = 1.3;
 export class CameraRig {
   constructor(camera, occluders) {
     this.camera = camera; this.occluders = occluders;
     this.yaw = 0; this.pitch = 0.32; this.dist = 6.5; this.cur = 6.5;      // cur = distance after collision
+    this.tYaw = 0; this.tPitch = 0.32; this.tDist = 6.5; this._y = 0; this._p = 0.32; this._d = 6.5; this.turnedAt = -9;
     this.focus = new THREE.Vector3(); this.ray = new THREE.Raycaster(); this.dir = new THREE.Vector3(); this.first = true;
+    this.indoor = 0; this.hits = []; this.o = new THREE.Vector3(); this.side = new THREE.Vector3(); this.upv = new THREE.Vector3();
   }
+  // a quick 45-degree turn around the character (Q / E), eased like everything else
+  turn(dir) { const s = Math.PI / 4; this.tYaw = Math.round((this.tYaw + dir * s) / s) * s; this.turnedAt = performance.now() / 1000; }
   // focus = point to look at (the player's head); heading = their walking direction or null when standing
   update(dt, focus, heading, input, now) {
-    this.yaw -= input.lookDX * 0.0052; this.pitch = THREE.MathUtils.clamp(this.pitch + input.lookDY * 0.004, -0.12, 1.3);
-    this.dist = THREE.MathUtils.clamp(this.dist * Math.exp(input.zoom), 2.4, 12);
+    // anything that set yaw / pitch / dist directly (spawning, travel) becomes the new target
+    if (this.yaw !== this._y) this.tYaw = this.yaw; if (this.pitch !== this._p) this.tPitch = this.pitch; if (this.dist !== this._d) this.tDist = this.dist;
+    if (input.padX || input.padY) input.lastLook = now;                                   // the camera pad: a steady orbit while held
+    this.tYaw -= input.lookDX * 0.0052 + input.padX * 2.4 * dt;
+    this.tPitch = THREE.MathUtils.clamp(this.tPitch + input.lookDY * 0.004 + input.padY * 1.5 * dt, PITCH_MIN, PITCH_MAX);
+    this.tDist = THREE.MathUtils.clamp(this.tDist * Math.exp(input.zoom), 2.4, 12);
     input.lookDX = input.lookDY = input.zoom = 0;
 
-    // drift back behind the player while they walk (unless they just dragged the camera or are walking at it)
-    if (heading !== null && now - input.lastLook > 1.4) {
-      const behind = heading + Math.PI, diff = lerpAngle(0, behind - this.yaw, 1);
-      if (Math.abs(diff) < 2.3) this.yaw += diff * Math.min(1, dt * 1.1);
+    // drift back behind the player while they walk (unless they just looked around or turned the camera)
+    if (heading !== null && now - Math.max(input.lastLook, this.turnedAt) > 1.4) {
+      const behind = heading + Math.PI, diff = lerpAngle(0, behind - this.tYaw, 1);
+      if (Math.abs(diff) < 2.3) this.tYaw += diff * Math.min(1, dt * 1.1);
     }
+    const k = Math.min(1, dt * 12);                                                      // ease towards the targets
+    this.yaw += lerpAngle(0, this.tYaw - this.yaw, 1) * k; this.pitch += (this.tPitch - this.pitch) * k; this.dist += (this.tDist - this.dist) * k;
+    this._y = this.yaw; this._p = this.pitch; this._d = this.dist;
     if (this.first) { this.focus.copy(focus); this.first = false; } else this.focus.lerp(focus, Math.min(1, dt * 11));
 
     const cp = Math.cos(this.pitch);
     this.dir.set(Math.sin(this.yaw) * cp, Math.sin(this.pitch), Math.cos(this.yaw) * cp);
-    // pull in if a wall, the ground or a roof sits between the player and the camera
-    this.ray.set(this.focus, this.dir); this.ray.far = this.dist + 0.4;
-    const hit = this.ray.intersectObjects(this.occluders, false)[0];
-    const want = hit ? Math.max(0.9, hit.distance - 0.35) : this.dist;
+    // indoors (a roof overhead): stay closer, so the camera lives comfortably under the ceiling
+    this.ray.set(this.focus, UP); this.ray.far = 16; this.hits.length = 0;
+    const roof = this.ray.intersectObjects(this.occluders, false, this.hits).length > 0;
+    this.indoor += ((roof ? 1 : 0) - this.indoor) * Math.min(1, dt * 3);
+    const dist = this.dist + (Math.min(this.dist, 5.2) - this.dist) * this.indoor;
+    // pull in if a wall, the ground or a ceiling sits between the player and the camera. Five parallel rays
+    // (centre + the camera's left / right / top / bottom edges) so the edges of the view never poke through a wall.
+    this.side.set(Math.cos(this.yaw), 0, -Math.sin(this.yaw)); this.upv.crossVectors(this.dir, this.side).normalize();
+    let want = dist;
+    for (const [a, b] of [[0, 0], [0.32, 0], [-0.32, 0], [0, 0.24], [0, -0.24]]) {
+      this.o.copy(this.focus).addScaledVector(this.side, a).addScaledVector(this.upv, b);
+      this.ray.set(this.o, this.dir); this.ray.far = dist + 0.4; this.hits.length = 0;
+      const hit = this.ray.intersectObjects(this.occluders, false, this.hits)[0];
+      if (hit) want = Math.min(want, Math.max(0.9, hit.distance - 0.35));
+    }
     this.cur = want < this.cur ? want : this.cur + (want - this.cur) * Math.min(1, dt * 4);   // in: instantly, out: gently
 
     const shoulder = Math.min(0.45, this.cur * 0.07);    // slight over-the-shoulder offset

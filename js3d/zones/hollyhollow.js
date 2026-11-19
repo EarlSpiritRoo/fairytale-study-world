@@ -77,6 +77,7 @@ export function build() {
   }
   snowman(-13.5, 8.6, '#ff9fd6'); snowman(-22.5, 1.5, '#b5d8ff');
 
+  K.sound('fire', V(LX, LY + 1.2, LZ - D / 2 + 1.4), 18, 1.4);                     // crackling near the library fireplace
   K.gates(0, 0, 26.5, Math.PI);
   K.keepOut.push([LX, LZ, 10.5], [16, -3, 7.5], [-18, 4.5, 6], [0, 22, 9], [0, 6, 4], [8, -3, 3]);
   const COB = ['#aeb6e0', '#c9cff0'];

@@ -14,6 +14,8 @@ window.FN = window.FN || {};
   // ids only: study.js checks circle sessions and ledger rows against this list (the 3D details live in js3d/kit.js)
   FN.ZONES = { skyfield: 1, lagoon: 1, hollyhollow: 1, pavilion: 1, petalwood: 1 };
   FN.ZONE_ORDER = Object.keys(FN.ZONES);
+  // Study Circle ids -> their realm. A realm's first circle uses the realm id; extra circles are 'realm.key'.
+  FN.CIRCLES = Object.assign({}, ...FN.ZONE_ORDER.map((z) => ({ [z]: z })), { 'skyfield.library': 'skyfield' });
   // slow day → sunset → day cycle driven by the wall clock, so every visitor sees the same sky
   FN.sunset = (now) => 0.5 - 0.5 * Math.cos((now % 240000) / 240000 * Math.PI * 2);
 })(window.FN);

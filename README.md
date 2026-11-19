@@ -6,7 +6,7 @@ A cozy multiplayer fairy-tale study world in 3D. Pick an avatar, explore five re
 
 | Realm | What it is | Study Circle |
 |---|---|---|
-| Skyfield | floating islands at four heights, rainbow bridges, cloud steps | Sky Gazebo, up the stairs |
+| Skyfield | floating islands, rainbow bridges, cloud steps, the pegasus stable isle, and the Opal Spire castle (waterfalls, cloud lagoon, great hall, spiral stair to a balcony) over the bridge behind the gazebo | Sky Gazebo, up the stairs · Starlight Library, inside the castle |
 | Coral Lagoon | underwater: caustic light, kelp, jellyfish, a reef terrace of shell homes | Pearl Study Grotto, centre |
 | Hollyhollow | snowy night village under an aurora, cottages, Lantern Hill | Fireplace Library, walk in at the north end |
 | Moonlit Pavilion | a lake at night, a glowing dance pavilion, lily-pad stones | Reading Terrace, across the second bridge |
@@ -21,7 +21,7 @@ Travel by walking through a glowing gate (each realm has four, near where you ar
 | ✦ Map | every realm, who is there, one-tap travel |
 | 💃 Actions | Stand, Sit (anywhere), Dance, Wave, Spin, Cheer. Everyone in the realm sees them. Moving cancels an action; Wave, Spin and Cheer end by themselves |
 | 📸 Snapshot | a framed picture of the game view with the realm's name and date. Name tags are optional. Desktop: Download PNG or Copy image. Phone: Share (the phone's share sheet) or Save |
-| ⚙️ Menu | ❓ Guide (How to move, Study Circles and solo timer, Travelling, Actions and snapshots, Report an issue) · ♪ Music on / off · 🔇 Mute all sound (remembered on this device; a small 🔇 badge sits on ⚙️ while muted) |
+| ⚙️ Menu | ❓ Guide (How to move, Study Circles and solo timer, Travelling, Actions and snapshots, Report an issue) · 🌿 Ambience on / off · Ambience and Effects volume sliders · 〰 Calm pad (soft music) on / off · 🔇 Mute all sound (all remembered on this device; a small 🔇 badge sits on ⚙️ while muted) |
 
 On phones the four buttons stack under the minutes pill; in landscape they share the top line. Every button's hit area is at least 44 × 44 px, and hover / press effects never move it. Clicking or tapping outside any popup, or pressing Esc, closes it; that press does not walk or turn the camera. A half-written issue report asks "Discard your message?" first.
 
@@ -36,7 +36,10 @@ config.js             Supabase URL + publishable key, Web3Forms key for issue re
 js/core.js            tiny shared helpers + the list of zone ids
 js/net.js             Supabase Realtime wrapper (falls back to solo mode)
 js/study.js           solo timer, shared circle timer, minutes ledger
-js/audio.js           synthesised sound effects + optional music, mute-all
+js/audio.js           synthesised effects, per-realm ambience with positional sources, music pad,
+                      volume buses, mute-all; wind, leaves, lake laps, hum and fire come and go on
+                      randomised rhythms (GUSTS); optional CC0 files via AUDIO_FILES in config.js
+audio/README.txt      how to drop in your own ambience files
 js3d/toon.js          style kit: cel shading, ink outlines, holo material, glows, instancing helper
 js3d/surfaces.js      animated materials: caustic sand, moonlit water, swaying kelp
 js3d/character.js     procedural chibi avatars and pets: idle, walk, run, sit, dance, wave, spin, cheer
@@ -64,13 +67,14 @@ python3 -m http.server 8000
 |---|---|---|
 | Walk | hold the left mouse button on the ground: you walk toward the cursor and follow it as it moves; let go to stop. WASD / arrow keys work too (Shift = walk slowly) | press and hold the ground: you walk toward your finger. Or the joystick under your left thumb |
 | Walk to a spot | quick click on the ground | quick tap on the ground |
-| Look around | right-drag, or two-finger drag on a Mac trackpad | drag with a second finger, or drag on empty sky |
-| Zoom | scroll wheel, or pinch on a trackpad | pinch with two fingers, anywhere |
-| Interact | E | tap the prompt button |
+| Orbit the camera | drag on empty sky, or right-drag anywhere; or the small camera pad bottom-right | the camera pad on the right (always on), a second finger, or drag on empty sky |
+| Quick turn | Q / E (45° left / right) | the camera pad |
+| Zoom | mouse wheel (any mouse), or pinch on a trackpad | pinch with two fingers, anywhere |
+| Interact | F or Enter | tap the prompt button |
 | Actions | keys 1–6 (Stand, Sit, Dance, Wave, Spin, Cheer), or 💃 | 💃 |
 | Travel | walk into a gate, or the ✦ map | same |
 
-Keys or the joystick override a held mouse button or finger. On a phone, two fingers that slide toward or away from each other zoom; anything else with a second finger looks around while you keep walking. Add `?low` to the URL to force low-quality mode, `?high` to stop the game switching to it on its own.
+The camera eases smoothly; tilt stops just above the ground and just short of straight down. The camera pad's knob springs back when you let go. Keys or the joystick override a held mouse button or finger. On a phone, two fingers that slide toward or away from each other zoom; anything else with a second finger looks around while you keep walking. Add `?low` to the URL to force low-quality mode, `?high` to stop the game switching to it on its own.
 
 ## Setup
 

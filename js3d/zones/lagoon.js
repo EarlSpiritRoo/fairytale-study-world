@@ -59,6 +59,7 @@ export function build() {
   add(G.cyl, toon('#d9c6ff'), V(GX, GY + 0.2, GZ), { s: [0.5, 0.4, 0.5], ink: true }); post(GX, GZ, 0.6, 0, 2);
   const pearl = add(G.sphere, holo(), V(GX, GY + 1.0, GZ), { s: 0.48, ink: true }), pg = glow('#e6f4ff', 4.5, 0.6); pg.position.copy(pearl.position); K.group.add(pg);
   animated.push((dt, t) => { pearl.position.y = GY + 1.0 + Math.sin(t * 1.5) * 0.08; pg.position.y = pearl.position.y; pg.material.opacity = 0.5 + 0.15 * Math.sin(t * 2); });
+  for (const [x, y, z] of [[GX, GY + 1, GZ], [-14, 1, 8], [15, 2, -8], [-9, 0.5, -14], [10, 0.5, 13]]) K.sound('bubbles', V(x, y, z), 13, 0.9);
   K.setCircle({ name: 'Pearl Study Grotto', x: GX, z: GZ, y: GY, r: 3.9, seats: K.seats(GX, GY, GZ, 2.6, 6, ['#ffc2e0', '#d9c8ff', '#bfe9ff', '#b8ffe9'], 0.2), label: V(GX, 5.4, GZ - 3) });
 
   // ----- reef terrace (east, up the steps or the ramp): shell homes on a higher level -----

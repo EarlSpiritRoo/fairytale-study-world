@@ -18,7 +18,7 @@
      sparkle: [[cx, cy, cz, radius, height], …]         where the ambient ✦ live
    ============================================================ */
 import * as THREE from 'three';
-import { toon, flat, starTexture, blobTexture, Batch, rng, THEME, uTime } from './toon.js';
+import { toon, flat, starTexture, blobTexture, Batch, rng, THEME, uTime, uPointScale } from './toon.js';
 import { makePet } from './character.js';
 
 const V = (x, y, z) => new THREE.Vector3(x, y, z);
@@ -149,7 +149,7 @@ export function createEnv(scene) {
     spGeo.attributes.position.needsUpdate = true; spGeo.attributes.aSize.needsUpdate = true; spGeo.attributes.aCol.needsUpdate = true;
   }
   function setLow(v) { low = v; sparkles.visible = !v; if (cur && cur.weather) wGeo.setDrawRange(0, Math.round((cur.weather.n || WN) * (v ? 0.5 : 1))); }
-  const setScale = (s) => { sparkles.material.uniforms.uScale.value = s; WU.uScale.value = s; };
+  const setScale = (s) => { sparkles.material.uniforms.uScale.value = s; WU.uScale.value = s; uPointScale.value = s; };
 
   return { apply, update, setLow, setScale, burst, trail };
 }

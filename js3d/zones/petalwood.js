@@ -84,6 +84,7 @@ export function build() {
   K.rays([[-6, 0, 6, 4, 22], [8, 0, -4, 5, 24], [-12, 0, -14, 4, 22], [14, 0, 10, 5, 24], [0, 0, -12, 4, 22], [-18, 0, 12, 4, 20], [20, 0, -8, 4, 22], [3, 0, 16, 4, 20]], '#fff0b8');
 
   K.drift('fairy', 7, 0, 1.8, -2, 20, 1.6); K.drift('butterfly', 7, 0, 1, 4, 22);
+  for (const [x, y, z] of [[0, 2, -2], [MX + 2.2, 4.5, MZ + 1.2], [-6, 2, 10], [8, 2, 6]]) K.sound('chimes', V(x, y, z), 15, 0.9);       // soft chimes near the fairies
   K.npc('Thistle', K.person('fairy', 2, 2), V(-4, 0, 3), 2.4, ['Welcome to Petalwood! The stools around the great flower are for studying. Sit, sit!', 'Climb the mushroom spiral to the west. The Canopy Deck has the best view.', 'We fairies leave sparkles behind us. It is a bit embarrassing, to be honest.']);
   K.npc('Fennel', K.person('fairy', 4, 0), V(MX + 0.5, 3.6, MZ + 2), 1.6, ['You made it up the spiral! Most visitors stop at the third cap.', 'From here you can see every flower house. Mine is the pink one.']);
   K.npc('Bramble', K.animal('puppy', 1.5, '#d9b48c'), V(16, 1.2, 4.2), 2, ['Bramble has found the picnic basket and is guarding it. Loudly.', 'A wag. You may pass.'], 1.5);

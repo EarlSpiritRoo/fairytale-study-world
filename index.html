@@ -21,6 +21,7 @@
 
   <!-- ============ HUD ============ -->
   <div id="hud" hidden>
+    <div id="camPad" title="Camera: drag to look around" aria-label="Camera pad"><div class="knob"></div></div>   <!-- second joystick: orbits the camera -->
     <div class="top">
       <div class="pill jelly" id="zonePill"><span id="zoneName">Skyfield</span><small id="onlineCount"></small></div>
       <div class="hudRight">
@@ -29,7 +30,7 @@
           <button class="iconBtn jelly" id="mapBtn" title="World map: travel and see who is where" aria-label="World map" aria-controls="mapPanel">✦</button>
           <button class="iconBtn jelly" id="actBtn" title="Actions (keys 1 to 6)" aria-label="Actions" aria-controls="actionMenu">💃</button>
           <button class="iconBtn jelly" id="snapBtn" title="Take a snapshot" aria-label="Snapshot">📸</button>
-          <button class="iconBtn jelly" id="setBtn" title="Guide, music and sound" aria-label="Settings" aria-controls="setMenu">⚙️<i class="badge" id="muteBadge" hidden>🔇</i></button>
+          <button class="iconBtn jelly" id="setBtn" title="Guide, ambience and sound" aria-label="Settings" aria-controls="setMenu">⚙️<i class="badge" id="muteBadge" hidden>🔇</i></button>
         </div>
       </div>
     </div>
@@ -56,7 +57,7 @@
         <p class="sub" id="circleBlocked" hidden>You are in a solo session. Finish or stop it to join this circle's timer.</p>
       </div>
 
-      <button class="btn prompt" id="prompt" hidden>Press E</button>
+      <button class="btn prompt" id="prompt" hidden>Press F</button>
       <div class="row center" id="studyRow">
         <button class="btn" id="studyBtn">📖 Start studying</button>
         <div class="pill jelly timer" id="soloPill" hidden><span id="soloText">📖 25:00</span><button class="x" id="soloStop" title="Stop session">Stop</button></div>
@@ -95,7 +96,10 @@
   <!-- ============ ⚙️ menu: guide, music, mute ============ -->
   <div class="card jelly" id="setMenu" hidden>
     <button class="chip menuItem" id="guideBtn"><span class="ico">❓</span><span class="lbl">Guide &amp; help</span></button>
-    <button class="chip menuItem" id="musicBtn" aria-pressed="false"><span class="ico">♪</span><span class="lbl">Music</span><span class="state" id="musicState">off</span></button>
+    <button class="chip menuItem" id="ambBtn" aria-pressed="true"><span class="ico">♪</span><span class="lbl">Ambience</span><span class="state" id="ambState">on</span></button>
+    <label class="slider"><span>Ambience volume</span><input type="range" id="volAmb" min="0" max="100" step="1" value="70" aria-label="Ambience volume"></label>
+    <label class="slider"><span>Effects volume</span><input type="range" id="volFx" min="0" max="100" step="1" value="80" aria-label="Effects volume"></label>
+    <button class="chip menuItem" id="padBtn" aria-pressed="false"><span class="ico">〰</span><span class="lbl">Calm pad</span><span class="state" id="padState">off</span></button>
     <button class="chip menuItem" id="muteBtn" aria-pressed="false"><span class="ico" id="muteIco">🔊</span><span class="lbl">Mute all sound</span><span class="state" id="muteState">off</span></button>
   </div>
 
@@ -125,7 +129,8 @@
           <li><b>WASD or arrow keys</b> also walk (hold Shift to stroll). Any key cancels a click-walk.</li>
           <li><b>Look around:</b> right-drag, or two-finger drag on a trackpad. <b>Zoom:</b> scroll wheel, or pinch on a trackpad.</li>
           <li><b>On a phone:</b> press and hold the ground to walk toward your finger, or use the joystick that appears under your left thumb. Drag with a second finger, or on empty sky, to look.</li>
-          <li><b>E</b> (or the pink prompt button) talks to characters and uses objects.</li>
+          <li><b>F</b> or <b>Enter</b> (or the pink prompt button) talks to characters and uses objects.</li>
+          <li><b>Camera:</b> drag the sky (or right-drag) to orbit freely, or drag the knob of the round camera pad in the bottom-right corner. <b>Q</b> / <b>E</b> make quick 45° turns. Scroll or pinch to zoom.</li>
         </ul>
       </div>
       <div class="pane" data-pane="study" hidden>
@@ -150,7 +155,7 @@
           <li><b>Actions</b> (💃 button, or keys 1 to 6): Stand, Sit, Dance, Wave, Spin, Cheer. Everyone nearby sees them. Moving cancels an action.</li>
           <li><b>Snapshots</b> (📸 button): takes a picture of the world in a little frame with the realm's name. Tick "Show name tags" if you want names in the shot.</li>
           <li>On a computer you can download the picture or copy it. On a phone you can share it straight to your apps, or save it.</li>
-          <li><b>Sound:</b> the ⚙️ menu has the Guide, music on / off, and Mute all sound (remembered on this device).</li>
+          <li><b>Sound:</b> the ⚙️ menu has Ambience on / off, separate Ambience and Effects volume sliders, an optional Calm pad, and Mute all sound. All remembered on this device. Sounds like waterfalls, the fireplace and the lake shore get louder as you walk closer.</li>
         </ul>
       </div>
       <div class="pane" data-pane="report" hidden>

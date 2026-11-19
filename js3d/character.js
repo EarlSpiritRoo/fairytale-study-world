@@ -41,10 +41,59 @@ function part(parent, geo, color, o = {}) {
   if (o.s) { if (typeof o.s === 'number') m.scale.setScalar(o.s); else m.scale.set(...o.s); }
   if (o.r) m.rotation.set(...o.r);
   if (o.ink !== false) outline(m);
+  if (o.tag) m.userData.tag = o.tag;                    // 'hair' / 'cape' / 'body' (used by the clipping test)
   parent.add(m); return m;
 }
 const pivot = (parent, x, y, z) => { const g = new THREE.Group(); g.position.set(x, y, z); parent.add(g); return g; };
 const ease = (cur, target, dt, k) => cur + (target - cur) * Math.min(1, dt * k);
+
+// ============================================================
+//  BODY CAPSULE: keeps long hair and the prince's cape outside the body
+// ============================================================
+// Everything here is in the avatar's rig frame, seen from the side: y up, z forward.
+// profile() records, for the current pose, how far BACK the body reaches at each height
+// (torso, skirt, trunk, arms, legs, tail). clearBody() takes a hanging part's wanted swing angle
+// and increases it until every sample point on the part's front face is behind that profile.
+const HAIR = { c: [0, -0.28, -0.07], s: [0.27, 0.34, 0.13] };          // the back hair blob (centre and radii, in its pivot frame)
+const HAIR_PIVOT = { head: [1.13, 0], at: [0.05, -0.2] };               // pivot: on the head at (y, z), head centre at rig (y, z)
+const HAIR_SAMPLES = [-0.98, -0.85, -0.65, -0.4, -0.1, 0.25].map((u) => [HAIR.c[1] + HAIR.s[1] * u, HAIR.c[2] + HAIR.s[2] * Math.sqrt(1 - u * u)]);
+const CAPE_PIVOT = { head: [0, 0], at: [0.96, -0.13] };
+const CAPE_SAMPLES = [0.06, 0.18, 0.3, 0.42, 0.54, 0.62].map((d) => [-d, 0.016]);
+const MARGIN = 0.025, BIN = 0.04, Y0 = -0.2, NB = 45;                 // profile bins: 4 cm tall, from y = -0.2 to 1.6
+const back = new Float32Array(NB);
+const mark = (y, b) => { const i = Math.floor((y - Y0) / BIN); if (i >= 0 && i < NB && b > back[i]) back[i] = b; };
+const circle = (yc, zc, r) => { for (let y = yc - r; y <= yc + r + 1e-6; y += BIN * 0.5) mark(y, -zc + Math.sqrt(Math.max(0, r * r - (y - yc) * (y - yc)))); };
+// a limb hanging from pivot (py, pz), rotated `ang` about x, as discs of radius r along its length
+const limb = (py, pz, ang, len, r, n = 5) => { const c = Math.cos(ang), s = Math.sin(ang); for (let i = 0; i <= n; i++) { const d = len * i / n; circle(py - d * c, pz - d * s, r); } };
+function profile(kind, A, arms, legs, tailA, tailB) {
+  back.fill(-9);
+  for (let y = 0.59; y <= 0.99; y += 0.02) { const t = (y - 0.79) / 0.2; mark(y, 0.155 * Math.sqrt(Math.max(0, 1 - t * t))); }      // torso
+  if (kind === 'princess') { const sy = 1 - A.sit * 0.42, sr = 1 + A.sit * 0.25, h = 0.66 * sy;                                   // skirt (+ hem ring)
+    for (let y = 0.72 - h; y <= 0.72; y += 0.02) mark(y, (0.17 + 0.3 * (0.72 - y) / h) * sr + 0.04); }
+  if (kind === 'prince') for (let y = 0.5; y <= 0.82; y += 0.02) mark(y, 0.17 + 0.055 * (0.81 - y) / 0.3 + 0.03);              // trunk + belt
+  if (kind === 'fairy') for (let y = 0.43; y <= 0.77; y += 0.02) mark(y, 0.23);                                                     // petal skirt
+  for (const a of arms) limb(0.9, 0, a.rotation.x, 0.3, kind === 'princess' ? 0.07 : 0.055);
+  if (kind === 'princess') for (const a of arms) circle(0.9, 0, 0.09);                                                               // puff sleeves
+  for (const l of legs) { limb(0.56, 0, l.rotation.x, 0.44, 0.07); const c = Math.cos(l.rotation.x), s = Math.sin(l.rotation.x); circle(0.56 - 0.5 * c, -0.5 * s, 0.1); }
+  if (tailA) { const a = tailA.rotation.x, b = a + tailB.rotation.x; limb(0.66, 0, a, 0.36, 0.19);
+    const ey = 0.66 - 0.36 * Math.cos(a), ez = -0.36 * Math.sin(a); limb(ey, ez, b, 0.33, 0.12); }
+}
+const behind = (y) => { const i = Math.floor((y - Y0) / BIN); return i >= 0 && i < NB ? back[i] : -9; };
+function clearBody(want, headRot, samples, P) {
+  const ch = Math.cos(headRot), sh = Math.sin(headRot);
+  let a = Math.min(want, 1.35);
+  for (let it = 0; it < 30; it++) {
+    const c = Math.cos(a), s = Math.sin(a); let ok = true;
+    for (const [y, z] of samples) {
+      const y1 = y * c - z * s + P.at[0], z1 = y * s + z * c + P.at[1];          // swing about the pivot, then place the pivot
+      const Y = y1 * ch - z1 * sh + P.head[0], Z = y1 * sh + z1 * ch + P.head[1];  // then the head's own tilt (hair only)
+      if (Z > -(behind(Y) + MARGIN)) { ok = false; break; }
+    }
+    if (ok || a >= 1.35) return a;
+    a += 0.035;
+  }
+  return a;
+}
 
 // ============================================================
 //  AVATAR
@@ -70,9 +119,10 @@ export function makeAvatar(look) {
 
   let hairBack = null;
   if (kind !== 'prince') {                                   // long hair that trails behind
+    // hangs from the back of the head, sitting a little OUT from the back so it never rests inside the body
     hairBack = pivot(head, 0, 0.05, -0.2);
-    part(hairBack, SPHERE, sc.hair, { s: [0.29, 0.42, 0.15], p: [0, -0.34, -0.02] });
-    for (const s of [-1, 1]) part(head, SPHERE, sc.hair, { s: [0.07, 0.17, 0.08], p: [s * 0.3, -0.12, 0.05], ink: false });
+    part(hairBack, SPHERE, sc.hair, { s: HAIR.s, p: HAIR.c, tag: 'hair' });
+    for (const s of [-1, 1]) part(head, SPHERE, sc.hair, { s: [0.065, 0.12, 0.07], p: [s * 0.3, -0.03, -0.12], ink: false, tag: 'hair' });
   }
   // accessory
   if (kind === 'princess' || kind === 'prince') {
@@ -88,12 +138,12 @@ export function makeAvatar(look) {
   }
 
   // ----- torso + arms -----
-  part(rig, SPHERE, kind === 'mermaid' ? skin : sc.main, { s: [0.185, 0.2, 0.155], p: [0, 0.79, 0] });
+  part(rig, SPHERE, kind === 'mermaid' ? skin : sc.main, { s: [0.185, 0.2, 0.155], p: [0, 0.79, 0], tag: 'body' });
   const arms = [-1, 1].map((s) => {
     const a = pivot(rig, s * 0.2, 0.9, 0);
-    if (kind === 'princess') part(a, SPHERE, sc.accent, { s: 0.085, p: [s * 0.01, 0, 0] });                // puff sleeve
-    part(a, LIMB, skin, { s: [0.048, 0.042, 0.048], p: [s * 0.03, -0.15, 0] });
-    part(a, SPHERE, skin, { s: 0.055, p: [s * 0.03, -0.29, 0], ink: false });
+    if (kind === 'princess') part(a, SPHERE, sc.accent, { s: 0.085, p: [s * 0.01, 0, 0], tag: 'body' });                // puff sleeve
+    part(a, LIMB, skin, { s: [0.048, 0.042, 0.048], p: [s * 0.03, -0.15, 0], tag: 'body' });
+    part(a, SPHERE, skin, { s: 0.055, p: [s * 0.03, -0.29, 0], ink: false, tag: 'body' });
     a.rotation.z = s * 0.14; a.userData.side = s; return a;
   });
 
@@ -102,23 +152,23 @@ export function makeAvatar(look) {
   if (legged) {
     legs = [-1, 1].map((s) => {
       const l = pivot(rig, s * 0.09, 0.56, 0);
-      part(l, LIMB, kind === 'prince' ? '#5d5388' : skin, { s: [0.058, 0.066, 0.058], p: [0, -0.24, 0] });
-      part(l, SPHERE, kind === 'prince' ? '#8a6652' : sc.accent, { s: [0.075, 0.055, 0.105], p: [0, -0.5, 0.03] });
+      part(l, LIMB, kind === 'prince' ? '#5d5388' : skin, { s: [0.058, 0.066, 0.058], p: [0, -0.24, 0], tag: 'body' });
+      part(l, SPHERE, kind === 'prince' ? '#8a6652' : sc.accent, { s: [0.075, 0.055, 0.105], p: [0, -0.5, 0.03], tag: 'body' });
       return l;
     });
   }
   if (kind === 'princess') {
     skirt = pivot(rig, 0, 0.72, 0);
-    part(skirt, cyl(0.17, 0.47, 0.66, 14), sc.main, { p: [0, -0.33, 0] });
+    part(skirt, cyl(0.17, 0.47, 0.66, 14), sc.main, { p: [0, -0.33, 0], tag: 'body' });
     part(skirt, new THREE.TorusGeometry(0.46, 0.035, 6, 18), sc.accent, { p: [0, -0.64, 0], r: [Math.PI / 2, 0, 0], ink: false });
     part(rig, SPHERE, sc.accent, { s: [0.07, 0.045, 0.04], p: [0, 0.72, 0.16], ink: false });               // bow
   } else if (kind === 'prince') {
-    part(rig, cyl(0.17, 0.225, 0.3, 12), sc.main, { p: [0, 0.66, 0] });
+    part(rig, cyl(0.17, 0.225, 0.3, 12), sc.main, { p: [0, 0.66, 0], tag: 'body' });
     part(rig, new THREE.TorusGeometry(0.2, 0.028, 6, 14), sc.accent, { p: [0, 0.62, 0], r: [Math.PI / 2, 0, 0], ink: false });
     cape = pivot(rig, 0, 0.96, -0.13);
-    part(cape, new THREE.BoxGeometry(0.42, 0.62, 0.03), sc.accent, { p: [0, -0.31, 0] });
+    part(cape, new THREE.BoxGeometry(0.42, 0.62, 0.03), sc.accent, { p: [0, -0.31, 0], tag: 'cape' });
   } else if (kind === 'fairy') {
-    for (let i = 0; i < 6; i++) { const a = i / 6 * Math.PI * 2; part(rig, SPHERE, i % 2 ? sc.accent : sc.main, { s: [0.1, 0.17, 0.07], p: [Math.sin(a) * 0.13, 0.6, Math.cos(a) * 0.13], r: [0.5 * Math.cos(a), 0, -0.5 * Math.sin(a)] }); }
+    for (let i = 0; i < 6; i++) { const a = i / 6 * Math.PI * 2; part(rig, SPHERE, i % 2 ? sc.accent : sc.main, { s: [0.1, 0.17, 0.07], p: [Math.sin(a) * 0.13, 0.6, Math.cos(a) * 0.13], r: [0.5 * Math.cos(a), 0, -0.5 * Math.sin(a)], tag: 'body' }); }
     wings = [-1, 1].map((s) => {
       const w = pivot(rig, s * 0.04, 0.95, -0.14);
       part(w, new THREE.CircleGeometry(1, 12), '#fff', { s: [0.26, 0.4, 1], p: [s * 0.27, 0.12, 0], mat: holo(0.8, true), ink: false });
@@ -128,9 +178,9 @@ export function makeAvatar(look) {
   } else {                                                   // mermaid tail: two bending segments + fin
     for (const s of [-1, 1]) part(rig, SPHERE, sc.accent, { s: 0.075, p: [s * 0.08, 0.84, 0.115], ink: false });
     tailA = pivot(rig, 0, 0.66, 0);
-    part(tailA, cyl(0.19, 0.125, 0.36, 12), sc.main, { p: [0, -0.18, 0] });
+    part(tailA, cyl(0.19, 0.125, 0.36, 12), sc.main, { p: [0, -0.18, 0], tag: 'body' });
     tailB = pivot(tailA, 0, -0.36, 0);
-    part(tailB, cyl(0.125, 0.06, 0.3, 10), sc.main, { p: [0, -0.15, 0] });
+    part(tailB, cyl(0.125, 0.06, 0.3, 10), sc.main, { p: [0, -0.15, 0], tag: 'body' });
     for (const s of [-1, 1]) part(tailB, SPHERE, sc.accent, { s: [0.17, 0.035, 0.1], p: [s * 0.12, -0.33, 0], r: [0, 0, s * 0.5] });
   }
 
@@ -163,9 +213,18 @@ export function makeAvatar(look) {
       a.rotation.z = s * (0.14 + A.run * 0.12 + A.sit * 0.12 + A.dance * 0.45 + A.cheer * 0.3 + A.spinW * 1.25 + (s > 0 ? A.wave * (2.35 + Math.sin(A.t * 11) * 0.38) : 0));
     }
     legs.forEach((l, i) => { l.rotation.x = (i ? -1 : 1) * (sw * (0.65 + A.run * 0.35) * m + A.dance * beat * 0.4) - A.sit * 1.45; l.rotation.z = (i ? 1 : -1) * A.sit * 0.12; });
-    if (hairBack) hairBack.rotation.x = -(m * (0.3 + A.run * 0.25)) + Math.sin(A.t * 1.7) * 0.035 - A.sit * 0.1;
+    // Hair and cape: positive angle = swing BACK (away from the body). Sway is gentle and limited; then
+    // clearBody() tilts them further back only as much as needed to stay outside the body in this pose.
+    if (hairBack || cape) profile(kind, A, arms, legs, tailA, tailB);
+    if (hairBack) {
+      A.hair = ease(A.hair ?? 0.08, 0.08 + m * (0.16 + A.run * 0.14) + Math.sin(A.t * 1.7) * 0.025 + A.sit * 0.1 + A.dance * Math.abs(swing) * 0.1 + A.cheer * 0.12, dt, 7);
+      hairBack.rotation.x = clearBody(A.hair, head.rotation.x, HAIR_SAMPLES, HAIR_PIVOT);
+    }
     if (skirt) { skirt.scale.set(1 + A.sit * 0.25, 1 - A.sit * 0.42, 1 + A.sit * 0.25); skirt.rotation.z = sw * 0.06 * m + A.dance * swing * 0.14; skirt.rotation.x = -m * 0.08; }
-    if (cape) cape.rotation.x = -(0.14 + m * (0.45 + A.run * 0.3) + Math.sin(A.t * 2 + sw) * 0.05) - A.sit * 0.5;
+    if (cape) {
+      A.cape = ease(A.cape ?? 0.2, 0.2 + m * (0.32 + A.run * 0.22) + Math.sin(A.t * 2 + sw) * 0.035 + A.sit * 0.45 + A.dance * Math.abs(swing) * 0.15 + A.cheer * 0.2, dt, 8);
+      cape.rotation.x = clearBody(A.cape, 0, CAPE_SAMPLES, CAPE_PIVOT);
+    }
     for (const w of wings) w.rotation.y = w.userData.side * (0.35 + (0.5 + 0.5 * Math.sin(A.t * (16 + m * 8))) * 0.75);
     if (tailA) {
       tailA.rotation.x = 0.45 + m * 0.35 - A.sit * 1.75; tailA.rotation.z = sw * 0.22 * m + Math.sin(A.t * 1.5) * 0.05 * up;

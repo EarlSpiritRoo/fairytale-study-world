@@ -12,18 +12,31 @@ A cozy multiplayer fairy-tale study world in 3D. Pick an avatar, explore five re
 | Moonlit Pavilion | a lake at night, a glowing dance pavilion, lily-pad stones | Reading Terrace, across the second bridge |
 | Petalwood | flower-house forest, a mushroom spiral up to the Canopy Deck | Blossom Study Circle, centre |
 
-Travel by walking through a glowing gate (each realm has four, near where you arrive) or with the ✦ map button, which also shows how many people are in each realm and how many are studying.
+Travel by walking through a glowing gate (each realm has four, near where you arrive) or with the world map: tap the realm name at the top (▾). It shows how many people are in each realm and how many are focusing.
+
+## ⏱ Start timer
+
+| Mode | What it does | Bubble |
+|---|---|---|
+| 📖 Focus | 25, 50 or custom minutes, optional subject. Chat is emotes only | 📖 Focusing · Algorithms · 18:20 |
+| ☕ Break | 5, 10, 15 or custom minutes. Chat and emotes open | ☕ On a break · 03:10 |
+| 🍅 Pomodoro | focus / short break cycles, a long break after every N rounds (defaults 25 / 5 / 15 / 4, all changeable and remembered). A gentle chime and a toast at each switch. "Auto-start next phase" on by default; off = a Start next button when a phase ends | 🍅 Pomodoro 2/4 · Focus · 18:20 |
+
+Only focus time counts: toward the total on your name tag, and as "focusing" on the world map. Timers keep running in background tabs and survive a reload (a Pomodoro catches up on phases it slept through).
+
+## The world map (top left)
+
+The realm pill ("Skyfield · 1 online ▾") is the map button. It drops the map down right under it: all five realms, "N here · M focusing", and a Travel button. Click outside or press Esc to close (that click never moves your character). On a phone it opens full-width with thumb-sized Travel buttons.
 
 ## HUD buttons (top right)
 
 | Button | What it does |
 |---|---|
-| ✦ Map | every realm, who is there, one-tap travel |
 | 💃 Actions | Stand, Sit (anywhere), Dance, Wave, Spin, Cheer. Everyone in the realm sees them. Moving cancels an action; Wave, Spin and Cheer end by themselves |
 | 📸 Snapshot | a framed picture of the game view with the realm's name and date. Name tags are optional. Desktop: Download PNG or Copy image. Phone: Share (the phone's share sheet) or Save |
-| ⚙️ Menu | ❓ Guide (How to move, Study Circles and solo timer, Travelling, Actions and snapshots, Report an issue) · 🌿 Ambience on / off · Ambience and Effects volume sliders · 〰 Calm pad (soft music) on / off · 🔇 Mute all sound (all remembered on this device; a small 🔇 badge sits on ⚙️ while muted) |
+| ⚙️ Menu | ❓ Guide (How to move, Study Circles and the timer, Travelling, Actions and snapshots, Report an issue) · 🌿 Ambience on / off · Ambience and Effects volume sliders · 〰 Calm pad (soft music) on / off · 🔇 Mute all sound (all remembered on this device; a small 🔇 badge sits on ⚙️ while muted) |
 
-On phones the four buttons stack under the minutes pill; in landscape they share the top line. Every button's hit area is at least 44 × 44 px, and hover / press effects never move it. Clicking or tapping outside any popup, or pressing Esc, closes it; that press does not walk or turn the camera. A half-written issue report asks "Discard your message?" first.
+On phones the three buttons stack under the minutes pill; in landscape they share the top line. Every button's hit area is at least 44 × 44 px, and hover / press effects never move it. Clicking or tapping outside any popup, or pressing Esc, closes it; that press does not walk or turn the camera. A half-written issue report asks "Discard your message?" first.
 
 A small controls hint appears on the first visit only.
 
@@ -35,7 +48,7 @@ style.css             jelly Y2K UI, floating labels, prompt, joystick, world map
 config.js             Supabase URL + publishable key, Web3Forms key for issue reports
 js/core.js            tiny shared helpers + the list of zone ids
 js/net.js             Supabase Realtime wrapper (falls back to solo mode)
-js/study.js           solo timer, shared circle timer, minutes ledger
+js/study.js           ⏱ timer (focus / break / pomodoro), shared circle timer, minutes ledger
 js/audio.js           synthesised effects, per-realm ambience with positional sources, music pad,
                       volume buses, mute-all; wind, leaves, lake laps, hum and fire come and go on
                       randomised rhythms (GUSTS); optional CC0 files via AUDIO_FILES in config.js
@@ -98,7 +111,7 @@ The camera eases smoothly; tilt stops just above the ground and just short of st
 
 **Snapshots** re-render one frame and copy it into a 2D canvas with a holo frame and caption, so nothing extra runs while you play.
 
-**Study Circles.** One shared timer per realm. A session is only `{ start time, length }`, so every client derives the same countdown, and late joiners read it from presence. Step inside to join, stand still to sit on a free seat. You earn minutes only while you are inside during a focus round. A solo session keeps you out of the shared timer.
+**Study Circles.** One shared timer per realm. A session is only `{ start time, length }`, so every client derives the same countdown, and late joiners read it from presence. Step inside to join, stand still to sit on a free seat. You earn minutes only while you are inside during a focus round. Your own ⏱ timer keeps you out of the shared timer. After each focus round the circle takes a break together (☕ On a break), which does not count as focus.
 
 **Performance.** Each realm is built the first time someone enters it. Repeated props are instanced, shadows are blob discs, weather is one point cloud animated in a shader, pixel ratio is capped at 1.75, and there are no shadow maps or post-processing. If frames stay slow for about two seconds the game drops once to low quality: pixel ratio 1, no outlines, sparkles or drifting creatures, half the weather, shorter fog.
 

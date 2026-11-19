@@ -379,11 +379,25 @@ function myMeta() {
   return {
     n: me.name, k: me.kind, sc: me.scheme, sk: me.skin, p: me.pet, z: zone.id,
     x: r2(p.x), y: r2(p.y), zz: r2(p.z), r: r2(actor.rot), a: actor.anim, tm: Study.total(),
-    so: Study.solo ? { sub: Study.solo.subject, e: Study.solo.endsAt } : null,       // solo session
+    so: soloMeta(),                                                                  // my own timer (focus / break / pomodoro)
     ci: Study.myCircle,                                                              // circle I'm in
     cs: Study.circles,                                                               // sessions I know about (for late joiners)
   };
 }
+// my timer for presence, compact: m mode (f focus · b break · p pomodoro), ph phase (f / b), e ends at,
+// r round, n rounds before the long break, w waiting for "Start next"
+function soloMeta() {
+  const so = Study.solo; if (!so) return null;
+  return { m: so.mode === 'pomo' ? 'p' : so.mode === 'break' ? 'b' : 'f', ph: so.phase === 'break' ? 'b' : 'f', sub: so.subject || '', e: so.endsAt,
+    r: so.round || 0, n: so.pomo ? so.pomo.every : 0, w: so.waiting ? 1 : 0 };
+}
+function cleanTimer(t) {                                  // someone else's timer; an older client sends just { sub, e } = focus
+  if (!t || !isFinite(t.e)) return null;
+  const mode = t.m === 'p' ? 'pomo' : t.m === 'b' ? 'break' : 'focus';
+  return { mode, phase: mode === 'break' || t.ph === 'b' ? 'break' : 'focus', subject: mode === 'focus' ? String(t.sub || '').slice(0, 24) : '', endsAt: +t.e,
+    round: num(t.r, 1, 12, 1) | 0, every: num(t.n, 1, 12, 4) | 0, waiting: !!t.w };
+}
+const timerFocusing = (t, now) => !!t && t.phase === 'focus' && !t.waiting && t.endsAt > now;
 function pushPresence() { if (joined) Net.track(myMeta()); }
 
 let lastSent = { x: 0, y: 0, z: 0, r: 0, a: -1, at: 0 };
@@ -404,7 +418,7 @@ function cleanMeta(m) {
     pet: PETS.includes(m.p) ? m.p : 'kitten', zone: ZONES[m.z] ? m.z : START_ZONE,
     mx: num(m.x, -90, 90, 0), my: num(m.y, -20, 40, 0), mz: num(m.zz, -90, 90, 17), mr: num(m.r, -10, 10, 0), ma: num(m.a, 0, 7, 0) | 0,
     tm: num(m.tm, 0, 9999999, 0) | 0,
-    so: m.so && isFinite(m.so.e) ? { sub: String(m.so.sub || '').slice(0, 24), e: +m.so.e } : null,
+    so: cleanTimer(m.so),
     ci: FN.CIRCLES[m.ci] ? m.ci : null,
   };
 }
@@ -468,9 +482,9 @@ function placeTag(tag, x, y, z, maxDist) {
   const s = FN.clamp(9 / dist, 0.5, 1);
   tag.el.style.transform = `translate(${((proj.x * 0.5 + 0.5) * vw).toFixed(1)}px, ${((-proj.y * 0.5 + 0.5) * vh).toFixed(1)}px) translate(-50%, -100%) scale(${s.toFixed(3)})`;
 }
-function studyText(solo, circleId, now) {
-  if (solo && solo.e > now) return '📖 Studying · ' + (solo.sub ? solo.sub + ' · ' : '') + FN.fmt(solo.e - now);
-  if (circleId) { const ph = Study.phase(circleId, now); if (ph.name === 'focus') return '📖 Circle focus · ' + FN.fmt(ph.left); if (ph.name === 'break') return '☕ Break · ' + FN.fmt(ph.left); }
+function studyText(timer, circleId, now) {
+  const t = Study.timerText(timer, now); if (t) return t;
+  if (circleId) { const ph = Study.phase(circleId, now); if (ph.name === 'focus') return '📖 Focusing · Study Circle · ' + FN.fmt(ph.left); if (ph.name === 'break') return '☕ On a break · ' + FN.fmt(ph.left); }
   return '';
 }
 const circleCount = (z = zone.id) => { let n = Study.myCircle === z ? 1 : 0; for (const k in others) if (others[k].ci === z) n++; return n; };
@@ -486,7 +500,7 @@ function updateLabels(now) {
   if (!joined) return;
   const tagName = (n, tm) => n + (tm ? '  ✦ ' + tm + 'm' : '');
   setText(actor.tag, 'name', actor.tag.nm, tagName(me.name, Study.total()));
-  setText(actor.tag, 'study', actor.tag.stud, studyText(Study.solo && { sub: Study.solo.subject, e: Study.solo.endsAt }, Study.myCircle, now));
+  setText(actor.tag, 'study', actor.tag.stud, studyText(Study.myTimer(), Study.myCircle, now));
   placeTag(actor.tag, actor.pos.x, actor.vy + actor.lift + (actor.anim === ANIM.sit ? 1.3 : 1.72), actor.pos.z, 60);
   for (const id in others) {
     const o = others[id]; if (o.zone !== zone.id) continue;
@@ -503,7 +517,7 @@ function updateLabels(now) {
     if (plaque.txt !== txt) {
       plaque.txt = txt; const [b, s, sm] = plaque.el.children;
       b.textContent = C.name; s.textContent = '✨ ' + Study.zoneTotal(C.cid) + ' minutes focused here today';
-      sm.textContent = n + ' studying here now' + (ph.name === 'focus' ? '  ·  ⏳ ' + FN.fmt(ph.left) : ph.name === 'break' ? '  ·  ☕ ' + FN.fmt(ph.left) : '');
+      sm.textContent = n + ' in the circle' + (ph.name === 'focus' ? '  ·  📖 Focus ' + FN.fmt(ph.left) : ph.name === 'break' ? '  ·  ☕ Break ' + FN.fmt(ph.left) : '');
     }
     placeTag(plaque, C.label.x, C.label.y, C.label.z, mineNow === C ? 0 : C.labelDist || 70);   // indoor circles: only nearby (labels draw through walls)
   }
@@ -521,25 +535,59 @@ function toast(title, sub) {
 const celebrate = () => { if (actor) env.burst(actor.pos.clone().setY(actor.vy + 1.4), 30); };
 Study.send = (type, payload) => Net.send(type, payload);
 Study.onChange = () => pushPresence();
-Study.onEvent = (evt) => {
+Study.onEvent = (evt, info) => {
   const mins = (window.FABLE_CONFIG || {}).BREAK_MINUTES || 5;
-  if (evt === 'soloDone') { Audio.sfx('chime'); celebrate(); toast('Break time!', 'Session complete. Stretch, sip, breathe.'); }
-  if (evt === 'break') { Audio.sfx('chime'); celebrate(); toast('Break time!', mins + ' minutes together, then the next round.'); }
-  if (evt === 'breakOver') { Audio.sfx('pop'); toast('Break is over', 'Start the next round when the circle is ready.'); }
+  if (evt === 'soloDone' && info && info.mode === 'break') { Audio.sfx('chime'); toast('Break over ☕', 'Ready when you are: ⏱ Start timer.'); }
+  else if (evt === 'soloDone') { Audio.sfx('chime'); celebrate(); toast('Focus done ✨', 'Nice work. Stretch, sip, breathe.'); }
+  if (evt === 'pomo') {                                   // a pomodoro phase switch (several at once only after the tab slept: one chime)
+    if (!info.late) Audio.sfx('chime');
+    const next = info.waiting ? ' Press Start next when you are ready.' : '';
+    if (info.to === 'break') { celebrate(); toast(info.long ? 'Round ' + info.every + '/' + info.every + ' done, long break 🌙' : 'Focus done, take ' + info.len + ' ✨', (info.long ? info.len + ' minutes to rest properly.' : 'Up next: a ' + info.len + '-minute break.') + next); }
+    else toast('Break over, focus ' + info.round + '/' + info.every + ' 📖', 'Next: ' + info.len + ' minutes of focus.' + next);
+  }
+  if (evt === 'break') { Audio.sfx('chime'); celebrate(); toast('Focus done, take ' + mins + ' ✨', mins + ' minutes of break together, then the next focus round.'); }
+  if (evt === 'breakOver') { Audio.sfx('pop'); toast('Break over ☕', 'Start the next focus round when the circle is ready.'); }
   if (evt === 'circleStart') Audio.sfx('start');
   uiTick();
 };
-let soloMin = 25, circleMin = 25;
+let soloMin = 25, breakMin = 5, circleMin = 25, timerMode = 'focus';
 function chipGroup(selector, attr, inputEl, set) {
   const chips = [...document.querySelectorAll(selector)];
   chips.forEach((c) => { c.onclick = () => { chips.forEach((o) => o.classList.toggle('on', o === c)); inputEl.value = ''; set(+c.getAttribute(attr)); }; });
   inputEl.oninput = () => { const v = parseInt(inputEl.value, 10); if (v > 0) { chips.forEach((o) => o.classList.remove('on')); set(v); } };
 }
 chipGroup('[data-min]', 'data-min', $('soloCustom'), (v) => { soloMin = v; });
+chipGroup('[data-bmin]', 'data-bmin', $('breakCustom'), (v) => { breakMin = v; });
+// ⏱ timer dialog: three modes
+const GO_TEXT = { focus: 'Start focus', break: 'Start break', pomo: 'Start Pomodoro' };
+function setTimerMode(m) {
+  timerMode = m;
+  document.querySelectorAll('#timerTabs [data-mode]').forEach((b) => { const on = b.dataset.mode === m; b.classList.toggle('on', on); b.setAttribute('aria-selected', on); });
+  document.querySelectorAll('#studyModal [data-tpane]').forEach((p) => { p.hidden = p.dataset.tpane !== m; });
+  $('soloGo').textContent = GO_TEXT[m];
+  try { localStorage.setItem('fablenook.timerMode', m); } catch (e) { /* ignore */ }
+}
+document.querySelectorAll('#timerTabs [data-mode]').forEach((b) => { b.onclick = () => setTimerMode(b.dataset.mode); });
+function fillPomo() { const P = Study.pomoSettings(); $('pomoFocus').value = P.focus; $('pomoShort').value = P.short; $('pomoLong').value = P.long; $('pomoEvery').value = P.every; $('pomoAuto').checked = P.auto; pomoSummary(); }
+const readPomo = () => ({ focus: $('pomoFocus').value, short: $('pomoShort').value, long: $('pomoLong').value, every: $('pomoEvery').value, auto: $('pomoAuto').checked });
+function pomoSummary() { const P = Study.savePomo(readPomo()); $('pomoSum').textContent = P.focus + ' min focus · ' + P.short + ' min break · a ' + P.long + '-min long break after every ' + P.every + ' round' + (P.every > 1 ? 's' : ''); }
+['pomoFocus', 'pomoShort', 'pomoLong', 'pomoEvery'].forEach((id) => { $(id).oninput = pomoSummary; $(id).onchange = () => { pomoSummary(); fillPomo(); }; });
+$('pomoAuto').onchange = pomoSummary;
+$('pomoReset').onclick = () => { Study.savePomo({}); fillPomo(); };
 chipGroup('[data-cmin]', 'data-cmin', $('circleCustom'), (v) => { circleMin = v; });
-$('studyBtn').onclick = () => { $('studyModal').hidden = false; };
+$('studyBtn').onclick = () => {
+  let m = 'focus'; try { m = localStorage.getItem('fablenook.timerMode') || 'focus'; } catch (e) { /* ignore */ }
+  setTimerMode(GO_TEXT[m] ? m : 'focus'); fillPomo(); $('studyModal').hidden = false;
+};
 $('soloCancel').onclick = () => { $('studyModal').hidden = true; };
-$('soloGo').onclick = () => { Audio.unlock(); Audio.sfx('start'); Study.startSolo(soloMin, $('soloSubject').value.trim()); $('studyModal').hidden = true; uiTick(); };
+$('soloGo').onclick = () => {
+  Audio.unlock(); Audio.sfx('start');
+  if (timerMode === 'pomo') Study.startPomodoro(readPomo());
+  else if (timerMode === 'break') Study.startSolo(breakMin, '', 'break');
+  else Study.startSolo(soloMin, $('soloSubject').value.trim(), 'focus');
+  $('studyModal').hidden = true; uiTick();
+};
+$('soloNext').onclick = () => { Audio.unlock(); Audio.sfx('start'); Study.startNext(); uiTick(); };
 $('soloStop').onclick = () => { Study.stopSolo(); uiTick(); };
 $('circleStart').onclick = () => { Audio.unlock(); if (Study.myCircle) Study.startCircle(Study.myCircle, circleMin); uiTick(); };
 
@@ -557,7 +605,7 @@ document.querySelectorAll('[data-emote]').forEach((b) => {
 // ============================================================ 7b. HUD EXTRAS: mute, actions, guide, report, snapshot, hint
 const CFG = window.FABLE_CONFIG || {};
 const coarse = () => matchMedia('(pointer: coarse)').matches;
-const closePopups = () => { $('mapPanel').hidden = true; $('actionMenu').hidden = true; $('setMenu').hidden = true; };
+const closePopups = () => { $('mapPanel').hidden = true; $('zonePill').setAttribute('aria-expanded', 'false'); $('actionMenu').hidden = true; $('setMenu').hidden = true; };
 
 // ----- mute everything (music + effects), remembered by audio.js -----
 function showMuted() { $('muteIco').textContent = Audio.muted ? '🔇' : '🔊'; $('muteState').textContent = Audio.muted ? 'on' : 'off'; $('muteBadge').hidden = !Audio.muted; $('muteBtn').setAttribute('aria-pressed', Audio.muted ? 'true' : 'false'); $('muteBtn').title = Audio.muted ? 'Sound is muted: click to unmute' : 'Mute all sound'; }
@@ -656,7 +704,7 @@ $('snapShare').onclick = async () => { try { await navigator.share({ files: [new
 const POPUPS = [                                                     // topmost first
   { el: 'snapModal', card: '#snapModal .card', close: () => $('snapClose').click() },
   { el: 'guideModal', card: '#guideModal .card', close: () => closeGuideSafely() },
-  { el: 'mapPanel', btn: 'mapBtn' }, { el: 'actionMenu', btn: 'actBtn' }, { el: 'setMenu', btn: 'setBtn' },
+  { el: 'mapPanel', btn: 'zonePill', close: () => closeMap() }, { el: 'actionMenu', btn: 'actBtn' }, { el: 'setMenu', btn: 'setBtn' },
 ];
 const reportDirty = () => !$('guideModal').hidden && !document.querySelector('#guideModal [data-pane="report"]').hidden && !!($('repMsg').value.trim() || $('repName').value.trim() || $('repEmail').value.trim());
 function closeGuideSafely() {                                       // keep a half-written report unless the visitor says to throw it away
@@ -706,7 +754,7 @@ function uiTick() {
   const solo = Study.solo, here = circleAt(actor.pos), standing = !!here;
   $('studyBtn').hidden = !!solo || standing; $('soloPill').hidden = !solo;
   $('studyRow').hidden = $('studyBtn').hidden && $('soloPill').hidden;
-  if (solo) $('soloText').textContent = '📖 ' + (solo.subject ? solo.subject + ' · ' : '') + FN.fmt(solo.endsAt - now);
+  if (solo) { let t = Study.timerText(Study.myTimer(), now); if (vw <= 420) t = t.replace('🍅 Pomodoro ', '🍅 '); /* narrow phones: keep the phase and time visible */ if ($('soloText').textContent !== t) $('soloText').textContent = t; $('soloNext').hidden = !solo.waiting; }
   const focus = Study.inFocus();
   $('chatForm').hidden = focus; $('focusNote').hidden = !focus;
   $('circlePanel').hidden = !standing;
@@ -716,8 +764,8 @@ function uiTick() {
     $('circleStat').textContent = '✨ ' + Study.zoneTotal(here.cid) + ' minutes focused here today · ' + circleCount(here.cid) + ' here now';
     $('circleBlocked').hidden = !blocked; $('circleIdle').hidden = blocked || ph.name !== 'idle'; $('circleRunning').hidden = blocked || ph.name === 'idle';
     if (ph.name !== 'idle') {
-      $('circleClock').textContent = (ph.name === 'focus' ? '' : '☕ ') + FN.fmt(ph.left);
-      $('circleHint').textContent = ph.name === 'focus' ? 'Focus round of ' + ph.st.len + ' min. You earn minutes while you stay in the circle.' : 'Break together. The next round can start when it ends.';
+      $('circleClock').textContent = (ph.name === 'focus' ? '📖 ' : '☕ ') + FN.fmt(ph.left);
+      $('circleHint').textContent = ph.name === 'focus' ? '📖 Focus · a ' + ph.st.len + '-min round. Your focus minutes count while you stay in the circle.' : '☕ On a break together. Break minutes don\'t count; the next focus round can start when it ends.';
     }
   }
   hudBottom = $('bottom').offsetHeight + 10;
@@ -725,8 +773,9 @@ function uiTick() {
 // ----- zone map: who is where, and one-tap travel -----
 function zoneCounts() {
   const c = { all: 1 }; for (const z of ZONE_ORDER) c[z] = { here: 0, studying: 0 };
-  c[zone.id].here++; if (Study.solo || (Study.myCircle && Study.phase(Study.myCircle).name === 'focus')) c[zone.id].studying++;
-  for (const k in others) { const o = others[k], z = c[o.zone]; if (!z) continue; c.all++; z.here++; if ((o.so && o.so.e > Date.now()) || (o.ci && Study.phase(o.ci).name === 'focus')) z.studying++; }
+  const now = Date.now();                                    // only FOCUS counts as studying (breaks and waiting pomodoros do not)
+  c[zone.id].here++; if (Study.soloFocusing() || (Study.myCircle && Study.phase(Study.myCircle).name === 'focus')) c[zone.id].studying++;
+  for (const k in others) { const o = others[k], z = c[o.zone]; if (!z) continue; c.all++; z.here++; if (timerFocusing(o.so, now) || (o.ci && Study.phase(o.ci).name === 'focus')) z.studying++; }
   return c;
 }
 function drawMap(counts) {
@@ -738,18 +787,31 @@ function drawMap(counts) {
       const dot = document.createElement('i'); dot.style.background = ZONES[id].accent;
       const txt = document.createElement('div'), nm = document.createElement('b'), sub = document.createElement('small');
       nm.textContent = ZONES[id].name; nm.style.color = ZONES[id].ui; txt.append(nm, sub);
-      const go = document.createElement('button'); go.className = 'chip'; go.onclick = () => { if (id !== zone.id) travel(id); };
+      const go = document.createElement('button'); go.className = 'chip'; go.onclick = () => { if (id !== zone.id) { closeMap(); travel(id); } };
       row.append(dot, txt, go); list.appendChild(row);
     }
   }
   for (const row of list.children) {
     const id = row.dataset.zone, here = id === zone.id, go = row.querySelector('button'), sub = row.querySelector('small');
-    const t = counts[id].here + ' here · ' + counts[id].studying + ' studying'; if (sub.textContent !== t) sub.textContent = t;
+    const t = counts[id].here + ' here · ' + counts[id].studying + ' focusing'; if (sub.textContent !== t) sub.textContent = t;
     row.classList.toggle('here', here); go.disabled = here; const g = here ? 'You are here' : 'Travel'; if (go.textContent !== g) go.textContent = g;
   }
 }
-$('mapBtn').onclick = () => { const p = $('mapPanel'), open = p.hidden; closePopups(); p.hidden = !open; if (open) drawMap(zoneCounts()); };
-$('mapClose').onclick = () => { $('mapPanel').hidden = true; };
+// the realm pill IS the map button: the map drops down right under it
+function placeMap() {
+  const r = $('zonePill').getBoundingClientRect(), p = $('mapPanel'), phone = vw <= 560;
+  p.classList.toggle('full', phone);
+  p.style.top = Math.round(r.bottom + 8) + 'px';
+  p.style.left = phone ? '' : Math.round(Math.max(10, Math.min(r.left, vw - p.offsetWidth - 10))) + 'px';
+  p.style.maxHeight = Math.max(160, Math.round(vh - r.bottom - 18)) + 'px';
+}
+function closeMap() { $('mapPanel').hidden = true; $('zonePill').setAttribute('aria-expanded', 'false'); }
+$('zonePill').onclick = () => {
+  const open = $('mapPanel').hidden; closePopups();
+  if (open) { $('mapPanel').hidden = false; $('zonePill').setAttribute('aria-expanded', 'true'); drawMap(zoneCounts()); placeMap(); Audio.sfx('click'); }
+};
+$('mapClose').onclick = () => closeMap();
+window.addEventListener('resize', () => { if (!$('mapPanel').hidden) placeMap(); });
 setInterval(() => { Study.tick(); uiTick(); }, 250);     // setInterval keeps the timers alive in background tabs
 
 // ============================================================ 8. LOOP

@@ -1,8 +1,16 @@
 /* ============================================================
    study.js — the heart of Fablenook.
 
-   SOLO SESSION     a private countdown; you earn 1 minute per
-                    minute, even with the tab in the background.
+   SOLO TIMER       your own countdown ("⏱ Start timer"), three modes:
+                      focus     one focus session (you earn 1 minute per minute,
+                                even with the tab in the background)
+                      break     one timed break (earns nothing)
+                      pomodoro  focus / short break cycles, a long break after
+                                every N focus rounds; auto-starts the next phase
+                                or waits for "Start next"
+                    S.solo = { mode, phase, subject, startedAt, endsAt, last,
+                               round, len, waiting, pomo:{focus,short,long,every,auto} }
+                    Only phase 'focus' (and not waiting) earns minutes.
 
    STUDY CIRCLE     one shared timer per circle (a realm's first circle
                     uses the realm id, e.g. 'skyfield'; extras are 'skyfield.library'). A session is just
@@ -27,7 +35,8 @@
   const cfg = window.FABLE_CONFIG || {};
   const BREAK_MS = (cfg.BREAK_MINUTES || 5) * 60000;
   const MAX_GAP = 5 * 60000;          // circle only: a gap longer than this = you were away (asleep phone etc.)
-  const LS = { stats: 'fablenook.stats', ledger: 'fablenook.ledger', solo: 'fablenook.solo' };
+  const LS = { stats: 'fablenook.stats', ledger: 'fablenook.ledger', solo: 'fablenook.solo', pomo: 'fablenook.pomo' };
+  const POMO_DEFAULT = { focus: 25, short: 5, long: 15, every: 4, auto: true };
 
   const load = (k, d) => { try { return JSON.parse(localStorage.getItem(k)) || d; } catch (e) { return d; } };
   const save = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { /* private mode */ } };
@@ -41,7 +50,7 @@
     stats: load(LS.stats, { total: 0 }),
     ledger: load(LS.ledger, { day: dayKey(), z: {} }),
     onChange() {},            // something others should see changed (main.js re-tracks presence)
-    onEvent() {},             // ('soloDone' | 'break' | 'breakOver' | 'circleStart', zoneId)
+    onEvent() {},             // ('soloDone' | 'pomo' | 'break' | 'breakOver' | 'circleStart', zoneId or info)
     send() {},                // broadcast hook (main.js wires this to FN.Net.send)
   };
   let circleAcc = 0, soloAcc = 0, lastTick = Date.now();
@@ -76,15 +85,55 @@
     return true;
   };
 
-  // ---------- solo ----------
-  S.startSolo = (minutes, subject) => {
-    const now = Date.now(), len = FN.clamp(Math.round(minutes) || 25, 1, 240);
-    S.solo = { subject: String(subject || '').slice(0, 24), startedAt: now, endsAt: now + len * 60000, last: now };
+  // ---------- solo timer: focus, break or pomodoro ----------
+  const cleanPomo = (o) => ({ focus: FN.clamp(Math.round(+o.focus) || 25, 1, 180), short: FN.clamp(Math.round(+o.short) || 5, 1, 60),
+    long: FN.clamp(Math.round(+o.long) || 15, 1, 90), every: FN.clamp(Math.round(+o.every) || 4, 1, 12), auto: o.auto !== false });
+  S.pomoSettings = () => cleanPomo(Object.assign({}, POMO_DEFAULT, load(LS.pomo, {})));
+  S.savePomo = (o) => { const c = cleanPomo(Object.assign({}, POMO_DEFAULT, o)); save(LS.pomo, c); return c; };
+  function begin(phase, len, at) {                      // (re)start the current solo timer in a phase
+    const so = S.solo; so.phase = phase; so.len = len; so.startedAt = at; so.endsAt = at + len * 60000; so.last = at; so.waiting = false;
+  }
+  S.startSolo = (minutes, subject, mode = 'focus') => {          // mode 'focus' | 'break'
+    const now = Date.now(), len = FN.clamp(Math.round(minutes) || (mode === 'break' ? 5 : 25), 1, mode === 'break' ? 60 : 240);
+    S.solo = { mode, subject: mode === 'focus' ? String(subject || '').slice(0, 24) : '', round: 0 };
+    begin(mode, len, now); soloAcc = 0;
     S.myCircle = null; save(LS.solo, S.solo); S.onChange();
   };
-  S.stopSolo = () => { S.solo = null; save(LS.solo, null); S.onChange(); };
+  S.startPomodoro = (settings) => {
+    const P = S.savePomo(settings || S.pomoSettings()), now = Date.now();
+    S.solo = { mode: 'pomo', subject: '', round: 1, pomo: P };
+    begin('focus', P.focus, now); soloAcc = 0;
+    S.myCircle = null; save(LS.solo, S.solo); S.onChange();
+  };
+  // what comes after the phase that just ended
+  function nextPomo(so) {
+    const P = so.pomo;
+    if (so.phase === 'focus') { const long = so.round >= P.every; return { phase: 'break', round: so.round, len: long ? P.long : P.short, long }; }
+    return { phase: 'focus', round: so.round >= P.every ? 1 : so.round + 1, len: P.focus, long: false };
+  }
+  S.startNext = () => {                                 // "Start next" when auto-start is off
+    const so = S.solo; if (!so || !so.waiting) return;
+    begin(so.phase, so.len, Date.now()); save(LS.solo, so); S.onChange();
+  };
+  S.stopSolo = () => { S.solo = null; soloAcc = 0; save(LS.solo, null); S.onChange(); };
+  S.soloFocusing = () => !!S.solo && S.solo.phase === 'focus' && !S.solo.waiting;
+  // the bubble text for a timer (mine or someone else's, from presence): '📖 Focusing · Algorithms · 18:20'
+  S.timerText = (t, now) => {
+    if (!t) return '';
+    now = now || Date.now();
+    const left = t.waiting ? null : FN.fmt(Math.max(0, t.endsAt - now));
+    if (t.mode === 'pomo') return '🍅 Pomodoro ' + t.round + '/' + t.every + ' · ' + (t.phase === 'focus' ? 'Focus' : 'Break') + ' · ' + (left || 'ready');
+    if (t.endsAt <= now) return '';
+    if (t.mode === 'break') return '☕ On a break · ' + left;
+    return '📖 Focusing · ' + (t.subject ? t.subject + ' · ' : '') + left;
+  };
+  S.myTimer = () => { const so = S.solo; return so && Object.assign({}, so, { every: so.pomo ? so.pomo.every : 0 }); };
   const restored = load(LS.solo, null);                 // survive a page reload mid-session
-  if (restored && isFinite(restored.endsAt) && isFinite(restored.last)) S.solo = restored;
+  if (restored && isFinite(restored.endsAt) && isFinite(restored.last)) {
+    if (!restored.mode) { restored.mode = 'focus'; restored.phase = 'focus'; }              // a session saved by an older version
+    if (restored.mode === 'pomo') restored.pomo = cleanPomo(Object.assign({}, POMO_DEFAULT, restored.pomo));
+    S.solo = restored;
+  }
 
   // ---------- minutes ----------
   S.total = () => S.stats.total;
@@ -123,16 +172,27 @@
     const now = Date.now();
     if (S.ledger.day !== dayKey()) { S.ledger = { day: dayKey(), z: {} }; save(LS.ledger, S.ledger); }
 
-    // solo: credit wall-clock time since the last tick, up to the end of the session
-    if (S.solo) {
-      const upTo = Math.min(now, S.solo.endsAt);
-      soloAcc += Math.max(0, upTo - S.solo.last); S.solo.last = upTo;
-      const mins = Math.floor(soloAcc / 60000);
-      if (mins) { soloAcc -= mins * 60000; earn(mins, null); save(LS.solo, S.solo); }
-      if (now >= S.solo.endsAt) {
-        if (soloAcc >= 30000) earn(1, null);            // round the last partial minute
-        soloAcc = 0; S.stopSolo(); S.onEvent('soloDone');
+    // solo: credit wall-clock FOCUS time since the last tick, up to the end of the phase.
+    // A loop, so a pomodoro catches up correctly after the tab or phone slept through several phases.
+    for (let guard = 0; S.solo && !S.solo.waiting && guard < 50; guard++) {
+      const so = S.solo, upTo = Math.min(now, so.endsAt);
+      if (so.phase === 'focus') {
+        soloAcc += Math.max(0, upTo - so.last);
+        const mins = Math.floor(soloAcc / 60000);
+        if (mins) { soloAcc -= mins * 60000; earn(mins, null); }
       }
+      so.last = upTo;
+      if (now < so.endsAt) { save(LS.solo, so); break; }
+      // the phase is over
+      if (so.phase === 'focus' && soloAcc >= 30000) earn(1, null);          // round the last partial minute
+      soloAcc = 0;
+      if (so.mode !== 'pomo') { const mode = so.mode; S.stopSolo(); S.onEvent('soloDone', { mode }); break; }
+      const from = so.phase, nx = nextPomo(so), at = so.endsAt;
+      so.round = nx.round;
+      if (so.pomo.auto) begin(nx.phase, nx.len, at);                         // starts exactly when the last one ended
+      else { so.phase = nx.phase; so.len = nx.len; so.waiting = true; so.endsAt = at; }
+      save(LS.solo, so); S.onChange();
+      S.onEvent('pomo', { from, to: nx.phase, len: nx.len, long: nx.long, round: so.round, every: so.pomo.every, waiting: !so.pomo.auto, late: now - at > 5000 });
     }
 
     // circle: credit only the part of [lastTick, now] that overlaps the focus phase
@@ -158,5 +218,5 @@
   };
 
   // Am I in focus mode right now? (chat is emote-only while this is true)
-  S.inFocus = () => !!S.solo || (!!S.myCircle && S.phase(S.myCircle).name === 'focus');
+  S.inFocus = () => S.soloFocusing() || (!!S.myCircle && S.phase(S.myCircle).name === 'focus');
 })(window.FN);

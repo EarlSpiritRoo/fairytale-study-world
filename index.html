@@ -23,11 +23,10 @@
   <div id="hud" hidden>
     <div id="camPad" title="Camera: drag to look around" aria-label="Camera pad"><div class="knob"></div></div>   <!-- second joystick: orbits the camera -->
     <div class="top">
-      <div class="pill jelly" id="zonePill"><span id="zoneName">Skyfield</span><small id="onlineCount"></small></div>
+      <button class="pill jelly" id="zonePill" title="World map: travel and see who is where" aria-label="Realm and world map" aria-haspopup="true" aria-expanded="false" aria-controls="mapPanel"><span class="zp"><span id="zoneName">Skyfield</span><small id="onlineCount"></small></span><i class="caret" aria-hidden="true">▾</i></button>
       <div class="hudRight">
         <div class="pill jelly" id="minutesPill" title="Your total focus minutes"><i class="spark">✦</i> <b id="myMinutes">0</b> min</div>
         <div class="icons">
-          <button class="iconBtn jelly" id="mapBtn" title="World map: travel and see who is where" aria-label="World map" aria-controls="mapPanel">✦</button>
           <button class="iconBtn jelly" id="actBtn" title="Actions (keys 1 to 6)" aria-label="Actions" aria-controls="actionMenu">💃</button>
           <button class="iconBtn jelly" id="snapBtn" title="Take a snapshot" aria-label="Snapshot">📸</button>
           <button class="iconBtn jelly" id="setBtn" title="Guide, ambience and sound" aria-label="Settings" aria-controls="setMenu">⚙️<i class="badge" id="muteBadge" hidden>🔇</i></button>
@@ -42,25 +41,25 @@
         <h3 id="circleTitle">Study Circle</h3>
         <p class="stat" id="circleStat"></p>
         <div id="circleIdle">
-          <p class="sub">No session running. Start one for everyone here.</p>
+          <p class="sub">No round running. Start a focus round for everyone here.</p>
           <div class="row center">
             <button class="chip on" data-cmin="25">25 min</button>
             <button class="chip" data-cmin="50">50 min</button>
             <input class="mini" id="circleCustom" type="number" min="1" max="180" placeholder="custom" inputmode="numeric">
-            <button class="btn" id="circleStart">Start circle</button>
+            <button class="btn" id="circleStart">Start focus round</button>
           </div>
         </div>
         <div id="circleRunning" hidden>
           <div class="big" id="circleClock">25:00</div>
           <p class="sub" id="circleHint"></p>
         </div>
-        <p class="sub" id="circleBlocked" hidden>You are in a solo session. Finish or stop it to join this circle's timer.</p>
+        <p class="sub" id="circleBlocked" hidden>Your own timer is running. Stop it to join this circle's shared timer.</p>
       </div>
 
       <button class="btn prompt" id="prompt" hidden>Press F</button>
       <div class="row center" id="studyRow">
-        <button class="btn" id="studyBtn">📖 Start studying</button>
-        <div class="pill jelly timer" id="soloPill" hidden><span id="soloText">📖 25:00</span><button class="x" id="soloStop" title="Stop session">Stop</button></div>
+        <button class="btn" id="studyBtn">⏱ Start timer</button>
+        <div class="pill jelly timer" id="soloPill" hidden><span id="soloText">📖 25:00</span><button class="btn small" id="soloNext" hidden>Start next</button><button class="x" id="soloStop" title="Stop the timer">Stop</button></div>
       </div>
       <div class="row center jelly" id="talk">
         <form id="chatForm" autocomplete="off">
@@ -135,18 +134,19 @@
       </div>
       <div class="pane" data-pane="study" hidden>
         <ul>
-          <li><b>Solo timer:</b> press "Start studying", pick 25 or 50 minutes or your own length, and add a subject if you like. A 📖 bubble shows everyone you are busy. It keeps counting if you switch tabs.</li>
+          <li><b>⏱ Start timer</b> has three modes. <b>Focus:</b> 25, 50 or your own length, with an optional subject; a 📖 bubble shows you are focusing. <b>Break:</b> 5, 10, 15 or your own length; a ☕ bubble, chat stays open. <b>Pomodoro:</b> 25 min focus and 5 min breaks, with a 15 min long break after every 4 rounds (all changeable, and remembered). Turn off "Auto-start next phase" to get a Start next button instead. Timers keep counting if you switch tabs.</li>
+          <li>Only focus time counts: toward your total, and in the "focusing" numbers on the map.</li>
           <li><b>Study Circles:</b> every realm has one. Walk in and stand still: you sit down and join the shared timer. If nobody has started a round, you choose the length for everyone.</li>
-          <li>After each focus round the whole circle gets a 5-minute break together, then anyone can start the next round.</li>
+          <li>After each focus round the whole circle gets a 5-minute break together (☕ On a break), then anyone can start the next focus round.</li>
           <li>You earn only the minutes you were actually in the circle. Your total shows beside your name.</li>
-          <li><b>Focus mode:</b> while a session runs, chat is emotes only. 👋 ✨ 💪 ☕</li>
+          <li><b>Focus mode:</b> while you are focusing, chat is emotes only. 👋 ✨ 💪 ☕ On a break you can chat again.</li>
         </ul>
       </div>
       <div class="pane" data-pane="travel" hidden>
         <ul>
           <li>There are five realms: Skyfield, Coral Lagoon, Hollyhollow, Moonlit Pavilion and Petalwood.</li>
           <li><b>Gates:</b> each realm has four glowing gates near where you arrive. Walk through one.</li>
-          <li><b>Map:</b> the ✦ button lists every realm, how many people are there and how many are studying, with a Travel button.</li>
+          <li><b>Map:</b> tap the realm name at the top (▾). It lists every realm, how many people are there and how many are focusing, with a Travel button.</li>
           <li>You only see the people who are in the same realm as you.</li>
         </ul>
       </div>
@@ -185,20 +185,48 @@
     </div>
   </div>
 
-  <!-- ============ solo study dialog ============ -->
+  <!-- ============ ⏱ timer dialog: focus, break or pomodoro ============ -->
   <div class="overlay" id="studyModal" hidden>
     <div class="card jelly modal">
-      <h2>Start studying</h2>
-      <p class="sub">Everyone will see a little 📖 bubble over your head.</p>
-      <div class="row">
-        <button class="chip on" data-min="25">25 min</button>
-        <button class="chip" data-min="50">50 min</button>
-        <input class="mini" id="soloCustom" type="number" min="1" max="240" placeholder="custom" inputmode="numeric">
+      <h2>Start timer</h2>
+      <div class="row tabs" id="timerTabs" role="tablist">
+        <button class="chip on" data-mode="focus" role="tab">📖 Focus</button>
+        <button class="chip" data-mode="break" role="tab">☕ Break</button>
+        <button class="chip" data-mode="pomo" role="tab">🍅 Pomodoro</button>
       </div>
-      <input id="soloSubject" maxlength="24" placeholder="Subject (optional) — e.g. Algorithms">
+      <div data-tpane="focus">
+        <p class="sub">A 📖 bubble shows everyone you are focusing. Focus minutes count toward your total.</p>
+        <div class="row">
+          <button class="chip on" data-min="25">25 min</button>
+          <button class="chip" data-min="50">50 min</button>
+          <input class="mini" id="soloCustom" type="number" min="1" max="240" placeholder="custom" inputmode="numeric">
+        </div>
+        <input id="soloSubject" maxlength="24" placeholder="Subject (optional), e.g. Algorithms">
+      </div>
+      <div data-tpane="break" hidden>
+        <p class="sub">A ☕ bubble shows you are on a break. Break minutes don't count as focus. Chat and emotes stay open.</p>
+        <div class="row">
+          <button class="chip on" data-bmin="5">5 min</button>
+          <button class="chip" data-bmin="10">10 min</button>
+          <button class="chip" data-bmin="15">15 min</button>
+          <input class="mini" id="breakCustom" type="number" min="1" max="60" placeholder="custom" inputmode="numeric">
+        </div>
+      </div>
+      <div data-tpane="pomo" hidden>
+        <p class="sub">Focus and break take turns on their own. Only the focus parts count toward your total.</p>
+        <div class="pomoGrid">
+          <label>Focus <span><input class="mini" id="pomoFocus" type="number" min="1" max="180" inputmode="numeric"> min</span></label>
+          <label>Short break <span><input class="mini" id="pomoShort" type="number" min="1" max="60" inputmode="numeric"> min</span></label>
+          <label>Long break <span><input class="mini" id="pomoLong" type="number" min="1" max="90" inputmode="numeric"> min</span></label>
+          <label>Long break after <span><input class="mini" id="pomoEvery" type="number" min="1" max="12" inputmode="numeric"> rounds</span></label>
+        </div>
+        <label class="check"><input type="checkbox" id="pomoAuto" checked> Auto-start next phase</label>
+        <p class="sub" id="pomoSum"></p>
+        <button class="chip small" id="pomoReset">Reset to 25 / 5 / 15 / 4</button>
+      </div>
       <div class="row end">
         <button class="btn ghost" id="soloCancel">Cancel</button>
-        <button class="btn" id="soloGo">Begin</button>
+        <button class="btn" id="soloGo">Start focus</button>
       </div>
     </div>
   </div>

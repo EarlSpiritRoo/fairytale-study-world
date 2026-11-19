@@ -386,3 +386,54 @@ body.lowq .card, body.lowq .overlay { -webkit-backdrop-filter: none; backdrop-fi
   #setMenu .menuItem { min-height: 42px; }
   #setMenu .slider input[type=range] { height: 30px; }
 }
+
+/* ============================================================
+   round 10: the realm pill is the world-map button; ⏱ timer modes
+   ============================================================ */
+#zonePill { position: relative; cursor: pointer; text-align: left; border: 0; font-weight: 400; }
+#zonePill .caret { font-style: normal; font-family: var(--sans); font-size: .8em; color: var(--ink-soft); margin-left: 6px; display: inline-block; transition: transform .2s ease; }
+#zonePill[aria-expanded="true"] .caret { transform: rotate(180deg); }
+#zonePill:hover { filter: brightness(1.05) saturate(1.1) drop-shadow(0 0 6px rgba(255, 170, 225, .7)); }
+#zonePill:focus-visible { outline: 3px solid rgba(255, 143, 208, .6); outline-offset: 2px; }
+/* the map drops down directly under the pill (main.js sets top / left / max-height) */
+#mapPanel { right: auto; width: min(340px, calc(100vw - 20px)); transform-origin: top left; animation: drop .18s ease-out; overflow: auto; }
+#mapPanel.full { left: calc(10px + env(safe-area-inset-left)); right: calc(10px + env(safe-area-inset-right)); width: auto; padding: 12px; }
+#mapPanel.full .mapRow { padding: 8px 10px; }
+#mapPanel.full .mapRow .chip { min-height: 46px; min-width: 92px; font-size: .95rem; }
+@keyframes drop { from { opacity: 0; transform: translateY(-6px) scale(.98); } }
+
+/* ⏱ timer dialog */
+#timerTabs { margin: 4px 0 10px; }
+#studyModal [data-tpane] > * + * { margin-top: 8px; }
+.pomoGrid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 12px; }
+.pomoGrid label { display: flex; flex-direction: column; gap: 4px; font-weight: 800; font-size: .85rem; color: var(--ink-soft); margin: 0; }
+.pomoGrid label span { display: flex; align-items: center; gap: 6px; font-weight: 700; }
+.pomoGrid input.mini { width: 76px; }
+label.check { display: flex; align-items: center; gap: 8px; font-weight: 800; font-size: .92rem; cursor: pointer; margin: 4px 0 0; }
+label.check input { width: 20px; height: 20px; accent-color: #ff6fc0; }
+.chip.small { padding: 5px 11px; font-size: .8rem; }
+.btn.small { padding: 5px 14px; font-size: .88rem; }
+#soloPill { max-width: 100%; }
+#soloText { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+@media (max-width: 339px) { .pomoGrid { grid-template-columns: 1fr; } }
+#zonePill { display: flex; align-items: center; gap: 0; }
+#zonePill .zp { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#zonePill .caret { flex: none; }
+/* toasts: wide enough that a short title stays on one line (left:50% + translate shrinks them otherwise) */
+#toast { width: max-content; max-width: min(420px, 90vw); }
+@media (max-width: 560px) { #toast { font-size: 1.5rem; padding: 12px 20px; } #toast small { font-size: .85rem; } }
+/* the timer pill never overflows: the text shrinks (…), the buttons keep their size */
+#soloPill { display: flex; flex-wrap: nowrap; }
+#soloText { flex: 1 1 auto; }
+#soloPill .btn, #soloPill .x { flex: none; white-space: nowrap; }
+@media (max-width: 420px) { #soloPill { font-size: .92rem; gap: 6px; } #soloPill .btn.small { padding: 5px 11px; } }
+#studyRow { max-width: 100%; min-width: 0; }
+#soloPill { min-width: 0; max-width: calc(100vw - 20px - env(safe-area-inset-left) - env(safe-area-inset-right)); }
+/* landscape phones / short screens: the map goes wide with two columns so every Travel button fits without scrolling */
+@media (max-height: 500px) and (min-width: 561px) {
+  #mapPanel { width: min(600px, calc(100vw - 20px - env(safe-area-inset-left) - env(safe-area-inset-right))); padding: 10px 12px; gap: 4px; }
+  #mapList { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+  #mapPanel .mapRow { margin-top: 0; padding: 5px 8px; }
+  #mapPanel > .sub { display: none; }
+  #mapPanel h3 { font-size: 1.05rem; }
+}
